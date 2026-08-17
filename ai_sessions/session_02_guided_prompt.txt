@@ -143,3 +143,585 @@ This produced the counts above, including:
 
 If you want, I can also break this into a per-replica or per-view timeline so you can see when the divergence actually starts inside each run.
 
+yes
+Optimized tool selectionI'll add a short todo plan, then compute per-replica counts and per-view summaries.
+
+Created 4 todos
+
+Now I'll run a script to count the protocol patterns per replica (hs1/hs2/hs3/hs4) in both logs.
+
+Ran terminal command:  cd /mnt/c/Users/ah200/hotstuff && python3 - <<'PY'
+import re, pathlib, sys
+files = [
+    ('run-001','dataset/run-001-normal/main.log'),
+    ('run-002','dataset/run-002-normal/main_2.log')
+]
+replicas = ['hs1','hs2','hs3','hs4']
+patterns = [
+ ('block too old', r'block too old'),
+ ('Failed to verify sync info', r'Failed to verify sync info'),
+ ('OnLocalTimeout', r'OnLocalTimeout'),
+ ('OnRemoteTimeout', r'OnRemoteTimeout'),
+ ('not enough timeouts', r'not enough timeouts'),
+ ('VoteRule: liveness condition failed', r'VoteRule: liveness condition failed'),
+ ('HighQC updated', r'Successfully updated HighQC'),
+ ('HighQC not updated', r'HighQC not updated'),
+ ('advanceView', r'advanceView'),
+ ('CommitRule', r'CommitRule'),
+ ('DECIDE', r'DECIDE'),
+ ('TryCommit', r'TryCommit'),
+ ('OnNewView', r'OnNewView')
+]
+for runname, path in files:
+    text = pathlib.Path(path).read_text(errors='replace')
+    print('==',runname,'==')
+    for patname, pat in patterns:
+        # overall count
+        total = len(re.findall(pat, text))
+        print(f"{patname}: total={total}")
+        # per-replica
+        for r in replicas:
+            c = len(re.findall(rf"\b{r}\b.*{pat}", text))
+            print(f"  {r}: {c}")
+    print()
+PY
+
+I'll update the todo list marking per-replica counts done and start the per-view timeline step.
+
+Starting: *Compute per-view advancement timeline* (2/4)
+
+Progress update — per-replica counts complete. Next: generate per-view advancement timeline.
+
+Summary: per-replica counts for key protocol markers (totals and replica breakdowns)
+
+- block too old: run-001 total=979 (hs1=237, hs2=238, hs3=238, hs4=266); run-002 total=402 (hs1=105, hs2=86, hs3=102, hs4=109)
+- Failed to verify sync info: run-001 total=5 (hs1=1, hs3=4); run-002 total=17 (hs1=4, hs2=5, hs3=2, hs4=6)
+- OnLocalTimeout: run-001 total=382 (hs1=94, hs2=94, hs3=96, hs4=98); run-002 total=280 (hs1=75, hs2=67, hs3=64, hs4=74)
+- OnRemoteTimeout: run-001 total=1524 (hs1=383, hs2=381, hs3=382, hs4=378); run-002 total=1203 (hs1=291, hs2=312, hs3=308, hs4=292)
+- not enough timeouts: run-001 total=621 (hs1=159, hs2=157, hs3=152, hs4=153); run-002 total=491 (hs1=118, hs2=128, hs3=126, hs4=119)
+- VoteRule: liveness condition failed: run-001 total=4 (1 each hs1..hs4); run-002 total=4 (1 each)
+- HighQC updated (Successfully updated HighQC): run-001 total=14751 (≈3687 per replica); run-002 total=4448 (≈1112 per replica)
+- HighQC not updated: run-001 total=12045; run-002 total=4089
+- advanceView: run-001 total=68462 (≈17k per replica); run-002 total=21604 (≈5.4k per replica)
+- CommitRule: run-001 total=44237; run-002 total=13302
+- DECIDE: run-001 total=14743; run-002 total=4408
+- TryCommit: run-001 total=14751; run-002 total=4462
+- OnNewView: run-001 total=14833; run-002 total=4485
+
+Reproducible commands
+
+- Overall counts (earlier summary):
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 - <<'PY'
+import re, pathlib
+patterns = {
+ 'block too old': r'block too old',
+ 'Failed to verify sync info': r'Failed to verify sync info',
+ 'OnLocalTimeout': r'OnLocalTimeout',
+ 'OnRemoteTimeout': r'OnRemoteTimeout',
+ 'not enough timeouts': r'not enough timeouts',
+ 'VoteRule: liveness condition failed': r'VoteRule: liveness condition failed',
+ 'HighQC updated': r'Successfully updated HighQC',
+ 'HighQC not updated': r'HighQC not updated',
+ 'advanceView': r'advanceView',
+ 'CommitRule': r'CommitRule',
+ 'DECIDE': r'DECIDE',
+ 'Execute': r'Execute',
+ 'TryCommit': r'TryCommit',
+ 'OnNewView': r'OnNewView',
+}
+for name in ['dataset/run-001-normal/main.log','dataset/run-002-normal/main_2.log']:
+    text = pathlib.Path(name).read_text(errors='replace')
+    print(f'== {name} ==')
+    for pat,label in patterns.items():
+        c = len(re.findall(label, text))
+        print(f'{pat}: {c}')
+    print()
+PY
+```
+
+- Per-replica counts (what I just ran):
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 - <<'PY'
+import re, pathlib
+files = [
+    ('run-001','dataset/run-001-normal/main.log'),
+    ('run-002','dataset/run-002-normal/main_2.log')
+]
+replicas = ['hs1','hs2','hs3','hs4']
+patterns = [
+ ('block too old', r'block too old'),
+ ('Failed to verify sync info', r'Failed to verify sync info'),
+ ('OnLocalTimeout', r'OnLocalTimeout'),
+ ('OnRemoteTimeout', r'OnRemoteTimeout'),
+ ('not enough timeouts', r'not enough timeouts'),
+ ('VoteRule: liveness condition failed', r'VoteRule: liveness condition failed'),
+ ('HighQC updated', r'Successfully updated HighQC'),
+ ('HighQC not updated', r'HighQC not updated'),
+ ('advanceView', r'advanceView'),
+ ('CommitRule', r'CommitRule'),
+ ('DECIDE', r'DECIDE'),
+ ('TryCommit', r'TryCommit'),
+ ('OnNewView', r'OnNewView')
+]
+for runname, path in files:
+    text = pathlib.Path(path).read_text(errors='replace')
+    print('==',runname,'==')
+    for patname, pat in patterns:
+        total = len(re.findall(pat, text))
+        print(f\"{patname}: total={total}\")
+        for r in replicas:
+            c = len(re.findall(rf\"\\b{r}\\b.*{pat}\", text))
+            print(f\"  {r}: {c}\")
+    print()
+PY
+```
+
+Next step (I started it): produce a per-view advancement timeline showing counts per view (view number) of `advanceView`, `HighQC updated`, `DECIDE`, `CommitRule` to locate where runs diverge. Shall I proceed and generate that per-view timeline now?
+yes
+I'll extract per-view counts for advanceView, HighQC updates, TryCommit, CommitRule, and DECIDE, searching nearby lines for view numbers. Outcome: per-view counts for both runs to locate divergence.
+
+Ran terminal command:  cd /mnt/c/Users/ah200/hotstuff && python3 - <<'PY'
+import re, pathlib, collections
+patterns = {
+ 'advanceView': r'advanceView',
+ 'HighQC updated': r'Successfully updated HighQC',
+ 'TryCommit': r'TryCommit',
+ 'CommitRule': r'CommitRule',
+ 'DECIDE': r'DECIDE',
+ 'OnNewView': r'OnNewView'
+}
+files = [('run-001','dataset/run-001-normal/main.log'),('run-002','dataset/run-002-normal/main_2.log')]
+# helper to find view near a line index
+view_re = re.compile(r'Advanced to view (\d+)|view: (\d+)')
+for runname, path in files:
+    lines = pathlib.Path(path).read_text(errors='replace').splitlines()
+    print('==',runname,'==')
+    for pname, pat in patterns.items():
+        counts = collections.Counter()
+        for i, line in enumerate(lines):
+            if re.search(pat, line):
+                # search in window [i-3, i+3]
+                found = None
+                for j in range(max(0,i-3), min(len(lines), i+4)):
+                    m = view_re.search(lines[j])
+                    if m:
+                        v = m.group(1) or m.group(2)
+                        found = int(v); break
+                if found is None:
+                    counts['unknown'] += 1
+                else:
+                    counts[found] += 1
+        # print summary: top 10 views
+        print(f'{pname}: total={sum(counts.values())} unknown={counts.get("unknown",0)}')
+        for v, c in counts.most_common(10):
+            print(f'  view {v}: {c}')
+    print()
+PY
+
+Marking per-view timeline done and I'll summarize key divergence points next.
+
+Starting: *Produce verification commands and summarise results* (3/4)
+
+Update — per-view timeline extracted for these events: `advanceView`, `HighQC updated` (Successfully updated HighQC), `TryCommit`, `CommitRule`, `DECIDE`, `OnNewView` for both logs.
+
+Key findings (concise)
+
+- Overall divergence: main.log is ~3.2× more active in `advanceView` (68,462 vs 21,604) and similarly higher in `HighQC updated` (14,751 vs 4,448), `TryCommit` (14,751 vs 4,462), `CommitRule` (44,237 vs 13,302), `DECIDE` (14,743 vs 4,408), and `OnNewView` (14,833 vs 4,485). This shows run-001 progressed through many more views/commits.
+
+- Per-view hotspots (top counts per view for each run):
+  - run-001 top `advanceView` views include view 0 (1,011) and many scattered view numbers (975, 3691, 3696, ...).
+  - run-002 top `advanceView` views include view 0 (794) and a cluster around views 898–912 (peaks e.g., view 899=52).
+  - `HighQC updated` top views: run-001 view 0 (31), others scattered; run-002 view 0 (30), view 189 (9), view 132 (8), etc.
+  - `CommitRule` top views: run-001 view 0 (28), many views ≈19; run-002 top views have multiple views at 19 (e.g., 89, 313, 633) and view 0 (18).
+  - `DECIDE` top: run-001 many views at 8–9; run-002 similar but different view indices (e.g., view 633 has 9).
+
+- View 0 is active in both runs (run-001: advanceView 1,011; run-002: 794) — initial-phase activity is comparable, but run-001 sustains far more activity across many further views.
+
+Concrete evidence / verification
+
+1) Per-pattern totals (already computed):
+- Run-001 totals:
+  - `block too old`: 979
+  - `Failed to verify sync info`: 5
+  - `OnLocalTimeout`: 382
+  - `OnRemoteTimeout`: 1524
+  - `not enough timeouts`: 621
+  - `VoteRule: liveness condition failed`: 4
+  - `Successfully updated HighQC`: 14751
+  - `HighQC not updated`: 12045
+  - `advanceView`: 68462
+  - `CommitRule`: 44237
+  - `DECIDE`: 14743
+  - `TryCommit`: 14751
+  - `OnNewView`: 14833
+
+- Run-002 totals:
+  - `block too old`: 402
+  - `Failed to verify sync info`: 17
+  - `OnLocalTimeout`: 280
+  - `OnRemoteTimeout`: 1203
+  - `not enough timeouts`: 491
+  - `VoteRule: liveness condition failed`: 4
+  - `Successfully updated HighQC`: 4448
+  - `HighQC not updated`: 4089
+  - `advanceView`: 21604
+  - `CommitRule`: 13302
+  - `DECIDE`: 4408
+  - `TryCommit`: 4462
+  - `OnNewView`: 4485
+
+2) Commands to reproduce everything (run these in the repo root):
+
+- Full pattern totals:
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 - <<'PY'
+import re, pathlib
+patterns = {
+ 'block too old': r'block too old',
+ 'Failed to verify sync info': r'Failed to verify sync info',
+ 'OnLocalTimeout': r'OnLocalTimeout',
+ 'OnRemoteTimeout': r'OnRemoteTimeout',
+ 'not enough timeouts': r'not enough timeouts',
+ 'VoteRule: liveness condition failed': r'VoteRule: liveness condition failed',
+ 'HighQC updated': r'Successfully updated HighQC',
+ 'HighQC not updated': r'HighQC not updated',
+ 'advanceView': r'advanceView',
+ 'CommitRule': r'CommitRule',
+ 'DECIDE': r'DECIDE',
+ 'Execute': r'Execute',
+ 'TryCommit': r'TryCommit',
+ 'OnNewView': r'OnNewView',
+}
+for name in ['dataset/run-001-normal/main.log','dataset/run-002-normal/main_2.log']:
+    text = pathlib.Path(name).read_text(errors='replace')
+    print(f'== {name} ==')
+    for pat,label in patterns.items():
+        c = len(re.findall(label, text))
+        print(f'{pat}: {c}')
+    print()
+PY
+```
+
+- Per-replica breakdown (shows hs1..hs4 counts):
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 - <<'PY'
+import re, pathlib
+files = [
+    ('run-001','dataset/run-001-normal/main.log'),
+    ('run-002','dataset/run-002-normal/main_2.log')
+]
+replicas = ['hs1','hs2','hs3','hs4']
+patterns = [
+ ('block too old', r'block too old'),
+ ('Failed to verify sync info', r'Failed to verify sync info'),
+ ('OnLocalTimeout', r'OnLocalTimeout'),
+ ('OnRemoteTimeout', r'OnRemoteTimeout'),
+ ('not enough timeouts', r'not enough timeouts'),
+ ('VoteRule: liveness condition failed', r'VoteRule: liveness condition failed'),
+ ('HighQC updated', r'Successfully updated HighQC'),
+ ('HighQC not updated', r'HighQC not updated'),
+ ('advanceView', r'advanceView'),
+ ('CommitRule', r'CommitRule'),
+ ('DECIDE', r'DECIDE'),
+ ('TryCommit', r'TryCommit'),
+ ('OnNewView', r'OnNewView')
+]
+for runname, path in files:
+    text = pathlib.Path(path).read_text(errors='replace')
+    print('==',runname,'==')
+    for patname, pat in patterns:
+        total = len(re.findall(pat, text))
+        print(f"{patname}: total={total}")
+        for r in replicas:
+            c = len(re.findall(rf"\\b{r}\\b.*{pat}", text))
+            print(f"  {r}: {c}")
+    print()
+PY
+```
+
+- Per-view top counts for key events (what I ran to map events to views):
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 - <<'PY'
+import re, pathlib, collections
+patterns = {
+ 'advanceView': r'advanceView',
+ 'HighQC updated': r'Successfully updated HighQC',
+ 'TryCommit': r'TryCommit',
+ 'CommitRule': r'CommitRule',
+ 'DECIDE': r'DECIDE',
+ 'OnNewView': r'OnNewView'
+}
+files = [('run-001','dataset/run-001-normal/main.log'),('run-002','dataset/run-002-normal/main_2.log')]
+view_re = re.compile(r'Advanced to view (\\d+)|view: (\\d+)')
+for runname, path in files:
+    lines = pathlib.Path(path).read_text(errors='replace').splitlines()
+    print('==',runname,'==')
+    for pname, pat in patterns.items():
+        counts = collections.Counter()
+        for i, line in enumerate(lines):
+            if re.search(pat, line):
+                found = None
+                for j in range(max(0,i-3), min(len(lines), i+4)):
+                    m = view_re.search(lines[j])
+                    if m:
+                        v = m.group(1) or m.group(2)
+                        found = int(v); break
+                if found is None:
+                    counts['unknown'] += 1
+                else:
+                    counts[found] += 1
+        print(f'{pname}: total={sum(counts.values())} unknown={counts.get("unknown",0)}')
+        for v, c in counts.most_common(10):
+            print(f'  view {v}: {c}')
+    print()
+PY
+```
+
+Next steps I can do (pick one):
+- Produce CSVs/time-series for a given pattern so you can plot it.
+- Show the cumulative difference by view (first view where run-001 cumulative >> run-002).
+- Extract sample contiguous view ranges showing full event traces to inspect exact behavior.
+
+Which of those would you like me to do next?
+Please do the first two options:
+
+1. Produce CSVs/time-series for the important protocol patterns so I can plot them later.
+2. Show the cumulative difference by view and identify the first view where run-001 starts to diverge clearly from run-002.
+
+Focus on these patterns:
+- block too old
+- Failed to verify sync info
+- OnLocalTimeout
+- OnRemoteTimeout
+- Successfully updated HighQC
+- HighQC not updated
+- advanceView
+- CommitRule
+- DECIDE
+- TryCommit
+- OnNewView
+
+Please provide:
+1. the Python script used,
+2. the generated CSV file names,
+3. a short summary of the most important divergence points,
+4. which findings are verified by counts,
+5. which findings are only interpretations or hypotheses.
+
+Do not only describe the result. Make sure the output can be reproduced from the log files.
+I'll create a Python analysis script and run it to generate per-pattern CSVs and a divergence summary.
+
+Created [](file:///mnt/c/Users/ah200/hotstuff/dataset/log_analysis/create_csvs.py)
+
+Ran terminal command:  cd /mnt/c/Users/ah200/hotstuff && python3 dataset/log_analysis/create_csvs.py
+
+Completed: *Produce verification commands and summarise results* (3/4)
+
+Done — I generated per-view CSVs and a divergence summary.
+
+1) Python script used
+- File: create_csvs.py
+- (Created and executed in the repo; it counts events per view for both runs, writes per-pattern CSVs, a combined per-view CSV, and `divergence_summary.json` and `readme_summary.txt`.)
+
+2) Generated CSV file names (all under log_analysis)
+- block_too_old.csv
+- failed_verify_sync_info.csv
+- OnLocalTimeout.csv
+- OnRemoteTimeout.csv
+- not_enough_timeouts.csv
+- VoteRule_liveness_failed.csv
+- HighQC_updated.csv
+- HighQC_not_updated.csv
+- advanceView.csv
+- CommitRule.csv
+- DECIDE.csv
+- TryCommit.csv
+- OnNewView.csv
+- combined_per_view.csv
+- divergence_summary.json
+- readme_summary.txt
+
+3) Short summary of most important divergence points (concrete)
+- Global totals (verified by counts in the CSVs/summary):
+  - `advanceView`: run-001 68,462 vs run-002 21,604 — run-001 progressed ~3.2× more.
+  - `HighQC_updated`: run-001 14,751 vs run-002 4,448.
+  - `TryCommit`: run-001 14,751 vs run-002 4,462.
+  - `CommitRule`: run-001 44,237 vs run-002 13,302.
+  - `DECIDE`: run-001 14,743 vs run-002 4,408.
+  - `block too old`: run-001 979 vs run-002 402.
+  - `Failed to verify sync info`: run-001 5 vs run-002 17 (run-002 worse here).
+
+- First clear divergence view (algorithmic detection, see caveat below):
+  - The script records a candidate divergence view per pattern in `divergence_summary.json` when cumulative_run-001 >= 1.2 * cumulative_run-002 and absolute diff >= 50.
+  - Example picks from the script output:
+    - `block_too_old`: divergence_view = 1711
+    - `OnLocalTimeout`: divergence_view = 3704
+    - `advanceView`: divergence_view = 41
+    - `HighQC_updated`: divergence_view = 41
+    - `TryCommit`: divergence_view = 41
+    - `CommitRule`: divergence_view = 41
+    - `DECIDE`: divergence_view = 41
+    - `OnNewView`: divergence_view = 41
+  - The combined behavior shows divergence early (around view ~41) for major commit/highQC events, and for some per-pattern metrics divergence occurs later.
+
+4) Which findings are verified by counts
+- All per-pattern totals and per-view counts are verified and reproducible: they are present in the CSVs listed above and were generated by the script run on the provided log files.
+- The CSVs contain per-view numeric counts and cumulative counts for both runs; these are the factual data you can plot directly.
+
+5) Which findings are interpretations/hypotheses
+- The choice of divergence threshold (>=20% relative and >=50 absolute difference) is an interpretive criterion I used to identify a "clear" divergence. The divergence view numbers in `divergence_summary.json` follow that definition and are therefore heuristic, not a unique ground truth.
+- Interpretation that run-001 is "healthier" or "faster" vs run-002 is a hypothesis based on higher counts of `advanceView`/`HighQC_updated`/`DECIDE`. The counts verify that activity was higher; asserting reasons (e.g., latency, load, configuration) requires further investigation.
+
+Reproducibility / how to run locally
+- Run the same script from repo root:
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 dataset/log_analysis/create_csvs.py
+```
+- Output CSVs and summary will appear under log_analysis.
+
+If you want, next I can:
+- Produce plots (PNG) of selected CSVs,
+- Export a small subset (e.g., views 0–500) of the combined CSV to inspect exact event sequences,
+- Tune the divergence threshold and recompute the first divergence view with different criteria. Which would you like?
+
+Made changes.
+what we can get out of those results and this comprastion
+I'll mark the remaining todo done, then summarize verified findings, hypotheses, and concrete next actions (with commands).
+
+Created 4 todos
+
+Summary of what we can get from the results and comparison (concise, actionable)
+
+Verified facts (direct from logs / CSVs)
+- run-001 shows much higher protocol activity: `advanceView` 68,462 vs `run-002` 21,604; `HighQC updated` 14,751 vs 4,448; `TryCommit` 14,751 vs 4,462; `DECIDE` 14,743 vs 4,408; `CommitRule` 44,237 vs 13,302. (CSV files: `dataset/log_analysis/*.csv`.)
+- run-001 has more timeouts and stale blocks overall: `OnLocalTimeout` 382 vs 280; `OnRemoteTimeout` 1,524 vs 1,203; `block too old` 979 vs 402.
+- run-002 has more `Failed to verify sync info` (17 vs 5) — a measurable regression in sync verification.
+- `VoteRule: liveness condition failed` is equal (4 vs 4) — no change in that specific liveness failure count.
+- Per-replica distribution is balanced (counts per `hs1`..`hs4` are similar), i.e., differences are global, not concentrated on a single replica.
+
+Interpretations / hypotheses (require further checks)
+- run-001 progressed through many more views and commits (likely higher throughput or faster view advancement). Hypothesis: run-001 either had lower per-view latency or more aggressive pacing (or more client traffic).
+- Higher `block too old` and timeouts in run-001 may be a byproduct of higher activity (more events → more late-arriving blocks/timeouts), not necessarily a fault.
+- run-002’s higher `Failed to verify sync info` suggests occasional synchronization or QC verification problems (could be due to network jitter, different seed, or TLS handshake issues).
+- The divergence early around view ≈ 41 (script-detected) for several key events suggests the runs start differing very early; this could be due to initial conditions or a small config/seed difference amplified by view progression.
+
+Concrete next checks you can run (copy-paste)
+- Inspect combined CSV head / a small view range (0–500):
+```bash
+# combined CSV is dataset/log_analysis/combined_per_view.csv
+awk 'NR==1 || ($1>=0 && $1<=500){print}' dataset/log_analysis/combined_per_view.csv > dataset/log_analysis/views_0_500.csv
+less dataset/log_analysis/views_0_500.csv
+```
+
+- Show raw log snippets around the candidate divergence view (view 41) for each run (prints 50 lines before/after matches):
+```bash
+# run-001
+grep -n 'view: 41\\|Advanced to view 41' dataset/run-001-normal/main.log | cut -d: -f1 | while read n; do start=$((n-50)); [ $start -lt 1 ] && start=1; sed -n \"${start},$((n+50))p\" dataset/run-001-normal/main.log; done > dataset/log_analysis/run-001_view41_snippets.log
+
+# run-002
+grep -n 'view: 41\\|Advanced to view 41' dataset/run-002-normal/main_2.log | cut -d: -f1 | while read n; do start=$((n-50)); [ $start -lt 1 ] && start=1; sed -n \"${start},$((n+50))p\" dataset/run-002-normal/main_2.log; done > dataset/log_analysis/run-002_view41_snippets.log
+```
+
+- Quickly compare counts per view to find the first view where cumulative difference exceeds your threshold (reuse the CSVs): the script already wrote `divergence_view` per pattern to divergence_summary.json. Inspect:
+```bash
+jq . dataset/log_analysis/divergence_summary.json
+```
+
+Recommended prioritized actions
+1. Plot `advanceView`, `HighQC_updated`, `TryCommit`, and `OnRemoteTimeout` time-series from the CSVs to visually confirm when divergence grows (I can create PNGs if you want).
+2. Inspect log snippets around the earliest divergence view (I provided commands above). Look for differences in proposer, timing, or client activity lines near that view.
+3. Compare run configuration/seed/clients for the two runs (are they identical?): check run-001-normal vs `run-002-normal` run metadata (e.g., any config files or CLI invocations).
+4. If sync verification errors matter, grep for the `Failed to verify sync info` contexts (the script showed run-002 has more). Example:
+```bash
+grep -n \"Failed to verify sync info\" -n dataset/run-002-normal/main_2.log | sed -n '1,200p'
+```
+
+Which outputs are facts vs interpretations
+- Facts: CSV totals and per-view counts and the `divergence_summary.json` entries — all reproducible by the scripts/commands above.
+- Interpretations: root causes (latency, client rate, configuration) and whether higher activity is “better” — these need further evidence (timing data, configuration, network traces).
+
+If you want I can:
+- Produce plots (PNG) for the top 4 metrics,
+- Extract and highlight the first N views where cumulative diff passes configurable thresholds,
+- Or run a side-by-side diff of the per-view event sequences for views 0–500.
+
+Which of those should I do next?
+Please produce plots (PNG) for the top metrics first.
+
+Use the CSV files that were already generated and create plots for:
+
+1. advanceView
+2. HighQC_updated
+3. DECIDE
+4. CommitRule
+5. OnRemoteTimeout
+6. block_too_old
+7. Failed_to_verify_sync_info
+
+For each plot:
+- show run-001 and run-002 over view number,
+- use the per-view counts or cumulative counts,
+- save the plot as a PNG file,
+- provide the Python plotting script,
+- explain briefly what the plot shows.
+
+Also tell me which plot best demonstrates the divergence between the two runs.
+
+After that, we can inspect raw log snippets around the most important divergence views.
+I'll add plotting tasks to the todo list, create a Python plotting script, and run it to generate PNGs.
+
+Created 6 todos
+
+Created [](file:///mnt/c/Users/ah200/hotstuff/dataset/log_analysis/plot_metrics.py)
+
+Ran terminal command:  cd /mnt/c/Users/ah200/hotstuff && python3 dataset/log_analysis/plot_metrics.py
+
+Done — plots created and the plotting script used.
+
+1) Python plotting script
+- File: plot_metrics.py
+- It reads the per-pattern CSVs in log_analysis, creates two-panel plots (top: counts per view, bottom: cumulative counts), and writes PNGs to plots.
+
+2) Generated PNG files
+- advanceView.png
+- HighQC_updated.png
+- DECIDE.png
+- CommitRule.png
+- OnRemoteTimeout.png
+- block_too_old.png
+- failed_verify_sync_info.png
+- Also a small text file best_metric.txt containing the metric with largest absolute cumulative difference.
+
+3) Brief explanation for each plot
+- advanceView.png — per-view counts and cumulative advanceView events for run-001 vs run-002. Shows a clear and growing cumulative gap (run-001 >> run-002).
+- HighQC_updated.png — per-view and cumulative counts of `Successfully updated HighQC`. Confirms greater QC progression in run-001.
+- DECIDE.png — per-view and cumulative `DECIDE` events. Mirrors commit activity: run-001 makes far more decisions.
+- CommitRule.png — per-view and cumulative `CommitRule` occurrences. Shows higher commit-rule activity for run-001.
+- OnRemoteTimeout.png — per-view and cumulative remote timeout events. Run-001 has more timeouts overall, visible in cumulative plot.
+- block_too_old.png — per-view and cumulative counts of stale blocks; run-001 higher.
+- failed_verify_sync_info.png — per-view and cumulative `Failed to verify sync info`; run-002 shows higher totals, visible in cumulative plot.
+
+4) Which plot best demonstrates divergence
+- `advanceView.png` best demonstrates divergence: the script reports the largest absolute cumulative difference for `advanceView` (run-001 − run-002 = 46,859), and the cumulative subplot clearly separates the runs early and keeps widening.
+
+5) Reproduce the plots locally
+```bash
+cd /mnt/c/Users/ah200/hotstuff
+python3 dataset/log_analysis/plot_metrics.py
+# PNGs will be in dataset/log_analysis/plots/
+```
+
+Next step (as you requested): inspect raw log snippets around the most important divergence views — I can:
+- Extract snippets around view ~41 (earliest divergence picked by earlier heuristic),
+- Extract around the view where cumulative advanceView difference first exceeds, say, 50 (the script earlier noted divergence thresholds and wrote `divergence_view` entries in divergence_summary.json).
+
+Which snippet range do you want first: view 41, the `advanceView` divergence view reported in `divergence_summary.json`, or the view where cumulative advanceView difference first exceeds 100?
+
+Made changes.
