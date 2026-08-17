@@ -1,0 +1,106 @@
+{
+  "block_too_old": {
+    "csv": "dataset/log_analysis/block_too_old.csv",
+    "total_run-001": 979,
+    "total_run-002": 402,
+    "unknown_run-001": 1,
+    "unknown_run-002": 2,
+    "divergence_view": 1711
+  },
+  "failed_verify_sync_info": {
+    "csv": "dataset/log_analysis/failed_verify_sync_info.csv",
+    "total_run-001": 5,
+    "total_run-002": 17,
+    "unknown_run-001": 0,
+    "unknown_run-002": 2,
+    "divergence_view": null
+  },
+  "OnLocalTimeout": {
+    "csv": "dataset/log_analysis/OnLocalTimeout.csv",
+    "total_run-001": 382,
+    "total_run-002": 280,
+    "unknown_run-001": 5,
+    "unknown_run-002": 8,
+    "divergence_view": 3704
+  },
+  "OnRemoteTimeout": {
+    "csv": "dataset/log_analysis/OnRemoteTimeout.csv",
+    "total_run-001": 1524,
+    "total_run-002": 1203,
+    "unknown_run-001": 0,
+    "unknown_run-002": 2,
+    "divergence_view": 0
+  },
+  "not_enough_timeouts": {
+    "csv": "dataset/log_analysis/not_enough_timeouts.csv",
+    "total_run-001": 621,
+    "total_run-002": 491,
+    "unknown_run-001": 0,
+    "unknown_run-002": 2,
+    "divergence_view": 0
+  },
+  "VoteRule_liveness_failed": {
+    "csv": "dataset/log_analysis/VoteRule_liveness_failed.csv",
+    "total_run-001": 4,
+    "total_run-002": 4,
+    "unknown_run-001": 0,
+    "unknown_run-002": 0,
+    "divergence_view": null
+  },
+  "HighQC_updated": {
+    "csv": "dataset/log_analysis/HighQC_updated.csv",
+    "total_run-001": 14751,
+    "total_run-002": 4448,
+    "unknown_run-001": 2,
+    "unknown_run-002": 1,
+    "divergence_view": 1329
+  },
+  "HighQC_not_updated": {
+    "csv": "dataset/log_analysis/HighQC_not_updated.csv",
+    "total_run-001": 12045,
+    "total_run-002": 4089,
+    "unknown_run-001": 0,
+    "unknown_run-002": 0,
+    "divergence_view": 0
+  },
+  "advanceView": {
+    "csv": "dataset/log_analysis/advanceView.csv",
+    "total_run-001": 68462,
+    "total_run-002": 21604,
+    "unknown_run-001": 2,
+    "unknown_run-002": 3,
+    "divergence_view": 0
+  },
+  "CommitRule": {
+    "csv": "dataset/log_analysis/CommitRule.csv",
+    "total_run-001": 44237,
+    "total_run-002": 13302,
+    "unknown_run-001": 0,
+    "unknown_run-002": 0,
+    "divergence_view": 1330
+  },
+  "DECIDE": {
+    "csv": "dataset/log_analysis/DECIDE.csv",
+    "total_run-001": 14743,
+    "total_run-002": 4408,
+    "unknown_run-001": 0,
+    "unknown_run-002": 0,
+    "divergence_view": 1323
+  },
+  "TryCommit": {
+    "csv": "dataset/log_analysis/TryCommit.csv",
+    "total_run-001": 14751,
+    "total_run-002": 4462,
+    "unknown_run-001": 0,
+    "unknown_run-002": 0,
+    "divergence_view": 1335
+  },
+  "OnNewView": {
+    "csv": "dataset/log_analysis/OnNewView.csv",
+    "total_run-001": 14833,
+    "total_run-002": 4485,
+    "unknown_run-001": 5,
+    "unknown_run-002": 1,
+    "divergence_view": 1338
+  }
+}
