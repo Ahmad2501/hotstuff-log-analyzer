@@ -1,0 +1,12 @@
+Rule-based View Classification Baseline
+=======================================
+
+Input file: dataset/run-001-normal/baseline/regex_parsed_events.jsonl
+Total views classified: 3717
+Output file: dataset/run-001-normal/baseline/rule_based_view_classification.jsonl
+
+Classification counts:
+normal_successful: 3622
+normal_with_timeout_noise: 63
+suspicious_or_incomplete: 28
+unknown: 4

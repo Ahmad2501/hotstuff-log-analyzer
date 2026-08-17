@@ -1,0 +1,30 @@
+Keyword Filtering Baseline
+==========================
+
+Input file: dataset/run-001-normal/main.log
+Total log lines: 204450
+Matched lines: 133001
+Filtered output: dataset/run-001-normal/baseline/keyword_filtered.log
+
+Event counts:
+collect_vote: 18475
+try_commit: 14751
+pre_commit: 14751
+highqc_updated: 14751
+commit: 14743
+decide: 14743
+exec: 14740
+highqc_not_updated: 12045
+received_proposal: 11065
+remote_timeout: 1524
+block_too_old: 979
+not_enough_timeouts: 621
+local_timeout: 382
+failed: 52
+
+Category counts:
+protocol_progress: 71087
+commit_pipeline: 58977
+timeout_related: 2527
+suspicious_or_noise: 979
+suspicious: 52
