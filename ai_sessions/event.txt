@@ -1,0 +1,96 @@
+Analyse the behaviour and participation of the four replicas in each execution. Compare replica behaviour within each execution and across the four runs. Examine the order of \texttt{CollectVote} events to identify which replicas appear most frequently first or last during vote collection. Identify recurring ordering patterns or unusual differences in replica behaviour. Support the findings with quantitative evidence from the original log files rather than estimations.
+
+I’ll extract `CollectVote` records from all four original logs, then compare per-replica participation and event position using exact counts.
+
+Search for `CollectVote`
+
+Search for `CollectVote`
+
+Search for `CollectVote`
+
+Search for `CollectVote`
+
+Ran terminal command: for f in /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/5cd5f352-c9b8-4850-8b47-5663771a64ca/main.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/3b8630cd-3fd2-429e-9968-46c254301a80/main_2.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/947554e1-e0c2-4147-a19f-473524b5a186/main_3.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/d241f3e9-27e5-4330-8b47-5663771a64ca/main_4.log; do echo "===== $(basename "$f") ====="; awk 'match($0, /hs[1-4].*CollectVote\(from [1-4]\): [^[:space:]]+/) { local=substr($0, RSTART, RLENGTH); if (match(local,/hs[1-4]/)) h=substr(local,RSTART+2,1); if (match(local,/from [1-4]/)) r=substr(local,RSTART+5,1); key=local; sub(/^.*CollectVote\(from [1-4]\): /,"",key); totals[r]++; nodes[h]++; groups[key]++; nodegroups[h SUBSEP key]++; seq++; pos[key SUBSEP groups[key]]=r; if (!(key in first)) first[key]=r; last[key]=r; poscounts[r,groups[key]]++ } END {print "total event lines:",seq; for (r=1;r<=4;r++) printf "from%d=%d ",r,totals[r]; print ""; for (h=1;h<=4;h++) printf "hs%d=%d ",h,nodes[h]; print ""; n=0; for (k in groups) n++; print "distinct keys:",n; }' "$f"; done
+
+Ran terminal command: for f in /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/5cd5f352-c9b8-4850-8b47-5663771a64ca/main.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe4-0a7a-9c02-b81b17ef8543/attachments/3b8630cd-3fd2-429e-9968-46c254301a80/main_2.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/947554e1-e0c2-4147-a19f-473524b5a186/main_3.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/d241f3e9-27e5-4330-8d3e-03a4c6bb99a5/main_4.log; do echo "===== $(basename "$f") ====="; awk 'match($0,/hs[1-4]/){h=substr($0,RSTART+2,1)} /CollectVote\(from [1-4]\):/ { if (match($0,/CollectVote\(from [1-4]\):/)) {x=substr($0,RSTART,RLENGTH); match(x,/[1-4]/); r=substr(x,RSTART,1)} key=substr($0,index($0,x)+length(x)+1); b=h SUBSEP key; totals[r]++; nodes[h]++; n[b]++; present[b,r]++; if (!(b in first)) {first[b]=r; ft[b]=$1} last[b]=r; lt[b]=$1; if (!(h SUBSEP key in seenkey)) {seenkey[h SUBSEP key]=1; ng[h]++} } END {printf "event rows=%d; distinct receiver/hash groups=%d\n",sum=0,0; for (h=1;h<=4;h++) {printf "hs%d events=%d groups=%d : ",h,nodes[h],ng[h]; for (r=1;r<=4;r++) printf "from%d=%d ",r,0; print ""} for (r=1;r<=4;r++) printf "from%d=%d ",r,totals[r]; print ""; for (h=1;h<=4;h++) for (k in seenkey) {split(k,a,SUBSEP); if (a[1]!=h) continue; b=h SUBSEP a[2]; d=0; for(r=1;r<=4;r++) if(present[b,r]) d++; hist[h,d]++; if(d==4) {complete[h]++; fst[h,first[b]]++; lst[h,last[b]]++; if(n[b]>4) extras[h]++; if(ft[b]==lt[b]) samets[h]++} else incomplete[h]++} for(h=1;h<=4;h++){printf "hs%d group sender-count histogram:",h; for(d=1;d<=4;d++)printf " %d:%d",d,hist[h,d]; printf "; complete=%d incomplete=%d complete-with-extra-lines=%d same-ms-first-last=%d\n",complete[h],incomplete[h],extras[h],samets[h]; printf "  first:";for(r=1;r<=4;r++)printf " %d=%d",r,fst[h,r]; printf "\n  last:";for(r=1;r<=4;r++)printf " %d=%d",r,lst[h,r];print ""} }' "$f"; done
+
+The logs show a highly regular shape: each `hsN` collector usually sees its own replica’s vote first. I’m checking full four-vote orderings and the small number of incomplete/duplicate groups before drawing cross-run conclusions.
+
+Ran terminal command: for f in /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/5cd5f352-c9b8-4850-8b47-5663771a64ca/main.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/3b8630cd-3fd2-429e-9968-46c254301a80/main_2.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/947554e1-e0c2-4147-a19f-473524b5a186/main_3.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/d241f3e9-27e5-4330-8d3e-03a4c6bb99a5/main_4.log; do echo "===== $(basename "$f") ====="; awk '/CollectVote\(from [1-4]\):/ { h=""; if (match($0,/hs[1-4]/)) h=substr($0,RSTART+2,1); if (match($0,/CollectVote\(from [1-4]\):/)) {x=substr($0,RSTART,RLENGTH); match(x,/[1-4]/); r=substr(x,RSTART,1)} key=substr($0,index($0,x)+length(x)+1); b=h SUBSEP key; totals[r]++; nodes[h]++; if (!(b in seenkey)) {seenkey[b]=1; ng[h]++} n[b]++; if (!present[b,r]) {present[b,r]=1; d[b]++; ord[b]=ord[b] r; if(d[b]==1) first[b]=r; last[b]=r} else dup[h]++ } END { for(r=1;r<=4;r++) printf "from%d=%d ",r,totals[r];print ""; for(h=1;h<=4;h++) {printf "hs%d events=%d groups=%d dupVoteLines=%d ",h,nodes[h],ng[h],dup[h]; for(z=1;z<=4;z++) {printf "distinct%d=%d ",z,0}; print ""} for(h=1;h<=4;h++) for(b in seenkey) {if (index(b,h SUBSEP)!=1)continue; dcount=d[b]; hist[h,dcount]++; if(dcount==4){full[h]++; fst[h,substr(ord[b],1,1)]++; lst[h,substr(ord[b],4,1)]++; perms[h,ord[b]]++}else partial[h]++;} for(h=1;h<=4;h++){printf "hs%d complete=%d partial=%d first",h,full[h],partial[h]; for(r=1;r<=4;r++)printf " %d:%d",r,fst[h,r]; printf " last"; for(r=1;r<=4;r++)printf " %d:%d",r,lst[h,r]; printf " topOrders"; for(p in perms) {split(p,a,SUBSEP); if(a[1]==h && perms[p]>max){max=perms[p];mp=a[2]}} if(max)printf " %s:%d",mp,max; max=0;mp=""; for(p in perms){split(p,a,SUBSEP);if(a[1]==h && perms[p]==max){} } print ""} }' "$f"; done
+
+Ran terminal command: for f in /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/5cd5f352-c9b8-4850-8b47-5663771a64ca/main.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/3b8630cd-3fd2-429e-9968-46c254301a80/main_2.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/947554e1-e0c2-4147-a9f-473524b5a186/main_3.log /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/d241f3e9-27e5-4330-8b47-5663771a64ca/main_4.log; do echo "===== $(basename "$f") ====="; awk '/CollectVote\(from [1-4]\):/ { h=""; match($0,/hs[1-4]/); h=substr($0,RSTART+2,1); match($0,/CollectVote\(from [1-4]\):/); x=substr($0,RSTART,RLENGTH); match(x,/[1-4]/); r=substr(x,RSTART,1); key=substr($0,index($0,x)+length(x)+1); b=h SUBSEP key; if(!seen[b])seen[b]=1; if(!present[b,r]){present[b,r]=1; d[b]++; ord[b]=ord[b] r} lno[b]=lno[b] (lno[b]?",":"") NR} END {for(b in seen) if(d[b]<4){split(b,a,SUBSEP);printf "hs%s distinct=%d senders=%s lines=%s key=%s\n",a[1],d[b],ord[b],lno[b],a[2]}}' "$f"; done
+
+Search for `(TEiBuu1j|5UFISgtJ|nV\+NRgFy|Ej2DrxJG|HVq7zN\+A|Rm//hGpp|DegHnHMm|tq5GQ99P|GY...`
+
+Ran terminal command: for f in /home/ahmad/.vscode-server/data/agentSessionData/43561309-7fe0-4a7a-9c02-b81b17ef8543/attachments/*/main*.log; do echo "===== $(basename "$f") ====="; awk '/CollectVote\(from [1-4]\):/ {match($0,/hs[1-4]/);h=substr($0,RSTART+2,1);match($0,/CollectVote\(from [1-4]\):/);x=substr($0,RSTART,RLENGTH);match(x,/[1-4]/);r=substr(x,RSTART,1);key=substr($0,index($0,x)+length(x)+1);b=h SUBSEP key;events++;sender[r]++;if(!seen[b]){seen[b]=1;groups[h]++} if(!present[b,r]){present[b,r]=1;distinct[b]++;ord[b]=ord[b] r}} END {for(r=1;r<=4;r++)printf "from%d=%d ",r,sender[r];printf "events=%d\n",events;for(h=1;h<=4;h++){printf "hs%d groups=%d ",h,groups[h];for(b in seen)if(index(b,h SUBSEP)==1){if(distinct[b]==4)complete[h]++;else incomplete[h]++}printf "complete=%d incomplete=%d\n",complete[h],incomplete[h]}}' "$f"; done
+
+## Summary
+
+Across all four executions, **all four replicas participate at very similar rates**. The clearest ordering pattern is local: while `hsN` collects votes, `from N` is almost always the first distinct vote recorded. This happened in **11,978 of 12,056 complete collector/hash groups (99.35%)**.
+
+The identity of the last vote varies more by collector and execution. `hs3` most often sees `from 1` last in every run; other collectors show some consistent tendencies, with a few shifts in the September runs.
+
+## Event counts from the logs
+
+Here, `from N` counts vote records by sender, while `hsN` counts records logged by that collector. These are raw `CollectVote(from N)` lines, including repeated sender records.
+
+| Execution | Original log | Vote records | `from 1 / 2 / 3 / 4` | `hs1 / 2 / 3 / 4` records | Complete groups |
+|---|---|---:|---|---|---:|
+| 1 | `main.log` | 14,787 | 3,696 / 3,697 / 3,697 / 3,697 | 3,695 / 3,699 / 3,695 / 3,698 | 3,686 of 3,688 |
+| 2 | `main_2.log` | 4,502 | 1,128 / 1,130 / 1,124 / 1,120 | 1,128 / 1,116 / 1,126 / 1,132 | 1,110 of 1,119 |
+| 3 | `main_3.log` | 14,436 | 3,607 / 3,612 / 3,608 / 3,609 | 3,610 / 3,605 / 3,608 / 3,613 | 3,601 of 3,603 |
+| 4 | `main_4.log` | 14,659 | 3,661 / 3,665 / 3,668 / 3,665 | 3,670 / 3,664 / 3,663 / 3,662 | 3,659 of 3,659 |
+
+Across all four logs, there are **48,384 vote records**. Sender totals are tightly clustered: `from 1` 12,092; `from 2` 12,104; `from 3` 12,097; `from 4` 12,091. That is no more than a 13-record spread across the four replicas. Collector totals are similarly close, ranging from 12,084 (`hs2`) to 12,105 (`hs4`). There is no persistent low-participation replica in these counts.
+
+## Which votes appear first and last
+
+I grouped records by collector (`hsN`) and the trailing block hash, then counted each sender’s first appearance in that group. The first vote was from the collector’s own replica in:
+
+| Execution | `hs1`: from 1 first | `hs2`: from 2 first | `hs3`: from 3 first | `hs4`: from 4 first |
+|---|---:|---:|---:|---:|
+| 1 | 918 / 922 | 914 / 922 | 913 / 920 | 915 / 922 |
+| 2 | 273 / 279 | 274 / 276 | 271 / 276 | 272 / 279 |
+| 3 | 897 / 900 | 896 / 900 | 898 / 901 | 894 / 900 |
+| 4 | 909 / 915 | 908 / 914 | 913 / 915 | 913 / 915 |
+
+Pooled across collectors, the first distinct sender counts are also nearly even: replica 1: **3,018**; replica 2: **3,014**; replica 3: **3,014**; replica 4: **3,010**. That near-even pooled result reflects the strong *collector-local* pattern: each replica tends to be first in its own collector’s log.
+
+The last distinct sender is less consistent. Across all complete groups, the pooled last counts are:
+
+| Sender appearing last | Count |
+|---|---:|
+| Replica 1 | 3,100 |
+| Replica 2 | 3,018 |
+| Replica 3 | 3,014 |
+| Replica 4 | 2,924 |
+
+Replica 1 is most frequent overall, but the difference is modest relative to 12,056 groups. By collector, the most frequent last sender was:
+
+| Execution | `hs1` | `hs2` | `hs3` | `hs4` |
+|---|---|---|---|---|
+| 1 | from 3 (466) | from 3 (475) | from 1 (482) | from 1 (484) |
+| 2 | from 2 and 3 (137 each) | from 3 (142) | from 1 (139) | from 1 (143) |
+| 3 | from 2 (459) | from 3 (455) | from 1 (453) | from 1 (453) |
+| 4 | from 2 (486) | from 4 (456; from 3 had 453) | from 1 (479) | from 2 (469) |
+
+The most stable tail pattern is at `hs3`: `from 1` is the most frequent last vote in all four runs. `hs4` most often ends with `from 1` in the first three runs, then `from 2` in run 4. `hs1` shifts from `from 3` in run 1, to a tie in run 2, then `from 2` in runs 3 and 4. `hs2` usually ends with `from 3`; run 4 flips narrowly to `from 4`.
+
+## Most common complete vote orders
+
+These are the modal orders of the four **distinct** senders in each collector/hash group; repeats are ignored for this ordering. Counts are out of complete groups for that collector.
+
+| Execution | `hs1` | `hs2` | `hs3` | `hs4` |
+|---|---|---|---|---|
+| 1 | 1→4→2→3 (464/922) | 2→1→4→3 (469/922) | 3→2→4→1 (476/920) | 4→3→2→1 (480/922) |
+| 2 | 1→4→2→3 (135/279) | 2→1→4→3 (139/276) | 3→2→4→1 (138/276) | 4→3→2→1 (139/279) |
+| 3 | 1→4→3→2 (458/900) | 2→1→4→3 (452/900) | 3→2→4→1 (450/901) | 4→3→2→1 (448/900) |
+| 4 | 1→4→3→2 (482/915) | 2→1→3→4 (454/914) | 3→2→4→1 (476/915) | 4→3→1→2 (465/915) |
+
+The recurring structure is **local vote first**, followed by a collector-specific peer ordering. The modal `hs3` sequence, 3→2→4→1, persists in all four executions. The `hs2` and `hs4` modal orders persist through the first three runs, then change in run 4; `hs1` changes between runs 2 and 3.
+
+## Interpretation and caveats
+
+The ordering analysis found 12,056 complete collector/hash groups and 13 incomplete groups: 2 in run 1, 9 in run 2, 2 in run 3, and none in run 4. Repeated records from the same sender were retained in the raw event totals but counted only once when determining distinct-sender order. The incomplete groups are incomplete observations under this grouping; they do not by themselves establish that a replica failed to vote.
+
+Order here means **log-line order**. Timestamps have millisecond resolution, so records with equal timestamps do not establish a finer-grained causal ordering.

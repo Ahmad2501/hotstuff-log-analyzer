@@ -1,0 +1,196 @@
+Log format and caveats
+* The logs have no wall-clock timestamps. Use line order only.
+* "Timestamp" in the logs means the epoch timestamp inside the protocol for a CID, not a clock time.
+
+can you analyze those logs based on those topics
+
+1. you can focus on measurable differences:
+
+* consensus progress and consensus IDs (CID)
+* PROPOSE, WRITE, and ACCEPT related events
+* decisions or executed requests
+* timeout-related events
+* leader-change related events
+* warnings, errors, or unusual messages
+
+2. for each consensus ID identify which replica is the first to send a write message and which replica is the last to send a write message. Do the same for accept messages. Make statistics and plots. Compare these patterns between the different logs and support the result with evidence. Identify if one of the replicas behaves differently from the others and support every result with evidence.
+
+3. can you analyze them based on view? Is there any match between the log entries and the views? Look at which views have the same pattern. What is the ordering in which votes are received? Does any replica often come first or last in the vote order? (A "view" here means the regency, the leader, and the epoch timestamp. The membership view "ID:0" is the same in all logs.)
+
+4. can you analyse the leader change and timeout to those files
+
+5. can you analyze those four logs the ordering of events:
+core chain is **PROPOSE → WRITE quorum → ACCEPT → ACCEPT quorum → local decision → ordered application execution → client reply**. Timeout/STOP/SYNC is a recovery branch that can restart the same CID at a higher timestamp, not a replacement for that normal chain.
+Relationships:
+The relationship between these events is that a valid PROPOSE from the expected leader makes the replicas enter the WRITE phase. Each replica then sends a WRITE message for the proposed value. When a replica observes a sufficient WRITE quorum for the same value, it can move to the ACCEPT phase and send an ACCEPT message. After enough matching ACCEPT messages are collected, the replica can make a local decision for that consensus instance. The decided request is then delivered to the application in order, executed, and finally a reply is returned to the client.
+If the request does not complete normally, a timeout can occur. A timeout does not necessarily mean that the consensus has failed immediately. The request can first be forwarded to the leader, and if it is still pending, the system can start a leader change. The recovery ordering is **timeout → STOP → STOPDATA → SYNC → resume the same CID at a higher timestamp → WRITE → ACCEPT → DECIDE**. A new regency represents a new leader-change period, while the higher timestamp represents a new attempt for the same consensus ID. (There are no wall-clock timestamps in the logs. "Timestamp" here means the epoch timestamp.)
+
+6. Regency analysis
+Background (to be checked against the logs, not assumed): in BFT-SMaRt the leader of a regency is the replica with ID = regency mod N. "Sending STOP" lines carry no replica ID, so who started a leader change must be inferred from the order of the received messages ("from replica N").
+
+* How many regencies does each log have (installed, and attempted but never installed)? If a log has no regency change, say so.
+* Did anything in a regency behave differently from the normal chain (PROPOSE, WRITE quorum, ACCEPT quorum, decision)? Treat regency 0 in a log without leader change as the normal case.
+* Did any regency fail or stall? Give the evidence first (lines, senders, counts, "Last regency / next regency" pairs, a message such as "Last regency: 1, next regency: 1" means the replica did not advance), then a labeled hypothesis.
+* Which replica was the leader in each regency, and was the leader replaced? Did the replaced leader keep acting as leader?
+* Did any replica respond late in a regency, or respond first or last often? Mark the answer as inferred where the sender is not tagged.
+* Which replicas started the leader change and which joined after receiving STOPs from others? How many distinct replicas sent STOP for each regency, and was the join threshold (F+1) reached?
+* Did a regency that was not installed affect the decisions of later CIDs?
+
+Output
+* Start with a short summary, then one table per log, then evidence with line numbers. State explicitly when a log has no regency events.
+* Save the scripts, CSV files (one per question, with named columns) and one plot per question, and state what each file contains.) how many tokens you use on  this analyse
+I'll start by inspecting the four logs' structure (formats, which lines carry replica IDs, how the protocol events look). Then I'll write parsing scripts and produce the CSVs, plots and the report.
+
+The first draft has leftover mess in `parse_log` and some overlap problems with client digits glued to data, such as `1114, WRITE's`. I'm rewriting it cleanly before running.
+
+Status: the Q1 script and its CSVs work. I'm tidying overlapping labels in the Q1 figure, then moving on to Q2, the first and last WRITE and ACCEPT senders per CID.
+
+The Q1 figure is clean now. Next is Q2: per-CID first and last WRITE and ACCEPT sender, with statistics, tests and plots.
+
+The Q2 script's leader sanity check tripped: log 1 has at least one CID with leader -1. I'll find which CIDs those are before I change anything.
+
+Q2 now runs. Before I interpret it, I want to see why the "first ACCEPT sent" and "first ACCEPT received" lines agree only about 34% of the time. I'll look at the raw message sequence for one CID.
+
+The write was refused because the file had not been re-read after the context reset, so the old script ran instead. I'll read it first, then write the new version.
+
+Before writing Q3 I'll re-read the exact wording of the task text, so the view definition and vote-order requirements are followed precisely.
+
+The Q3 figure is clean now. Since the elimination step changed which CIDs count, I'll confirm how many CIDs each view and message type ended up with, and recheck the headline numbers.
+
+Q1–Q3 are done (scripts, CSVs, plots). I'm now writing the Q4 (timeouts and leader change) and Q6 (regency) analysis scripts, then Q5 (event ordering) and the final report. Logs 1 and 3 contain no timeout or leader-change lines at all (grep finds none), logs 2 and 4 each have one installed regency (1). Log 4 additionally has an attempted regency 2 that was never installed.
+
+Still working: I've re-checked the raw leader-change lines in logs 2 and 4 (e.g. log 4 lines 163–232) and I'm now writing the Q4 script (timeline, STOP/STOPDATA sender inference, the start-up race, the STOP(2) retransmissions) before Q6 and Q5.
+
+The Q4 script runs; I'm checking its CSVs and the plot now. After that comes Q6 (regency analysis) and Q5 (event ordering), then the final report.
+
+Q4 outputs are generated and I'm polishing its plot (adding the start-up race to the timeline and a zoom on the 179-message idle-tail burst). Then I'll write the Q6 regency script.
+
+Q4 is finished (script, 7 CSVs, timeline plot). Next I'm writing the Q6 regency script: installed vs. attempted regencies, STOP senders against the F+1 / 2F+1 thresholds, leaders per regency, and whether the stalled regency 2 in log 4 affected later CIDs.
+
+Q6 groundwork is done. I verified that each "Last regency / next regency" line pairs with its receipt (never earlier, at most 4 lines apart), and in log 4 all 567 STOP(2) receipts show "Last regency: 1, next regency: 1", i.e. regency 2 never advanced. I'm now writing the Q6 script and its figure.
+
+Q6 tables are computed. Log 4's stalled regency 2 has no measurable effect on later CIDs: median decision latency is 93 lines against 93 in logs 2 and 3, with negligible effect sizes. The only remaining difference is log 1, whose latencies are slightly lower, with a small effect. I'm checking the Q6 figure next.
+
+Re-rendering the Q6 figure after layout fixes. Once it looks right, Q4 and Q6 are done and I start Q5 (verifying the normal PROPOSE→WRITE→ACCEPT→decide→execute→reply chain and the recovery chain against line order).
+
+Now building Q5 (event ordering): I re-read the task text, so the checks follow its chain exactly: PROPOSE, WRITE quorum, ACCEPT, ACCEPT quorum, decision, ordered execution, client reply, plus the recovery chain. The planned checks are per-CID stage ordering in all four logs, causality violations (to rate how reliable the line order is, mainly log 1), and the CID-0 ts 0 → ts 1 restart.
+
+Q5 exploration results so far: in logs 2–4 the pooled line order has zero violations of the PROPOSE→…→reply chain. Log 1 has none within a replica (3,971 complete replica–CID chains) but shows cross-replica disorder: 4–5% of WRITE and ACCEPT receipts are printed before the sender's own "Sending" line. I'm now writing the Q5 script and figure.
+
+Q5 (event ordering) script now runs. Logs 2–4 show 0 order violations on every chain link; log 1's cross-replica and client-reply "violations" are line-order artifacts. Now checking the recovery chain, the CID 0 retry and the figure.
+
+Q5: checking the recovery-chain details (STOP/STOPDATA/SYNC order in logs 2 and 4) and tightening the script before re-rendering the figure.
+
+Q5: rewrote the ordering script with exact per-replica checks, a relationship table and an order rule per recovery stage; re-running it now and re-inspecting the figure.
+
+Q5 is finished: the ordering CSVs and its figure are saved and the figure is clean. Next: the run-all script, a README listing every file, then the final report with line citations (and re-checking the key numbers against the raw lines).
+
+Pulling together the numbers from every CSV (Q1–Q6) for the report; next I'll create the report document with line-number evidence.
+
+Still collecting the Q3/Q4/Q6 numbers; after that I'll open the report document and fill it section by section, then verify the cited line numbers against the raw logs.
+
+Numbers for all six questions are collected; creating the report document now and filling it section by section.
+
+The report document is created with its outline (summary, one table per log, Q1–Q6, files, caveats); filling the sections now, one at a time.
+
+Filling in the written report now, section by section, using the numbers I've already checked against the raw log lines. After that I'll write the run script and README and package the scripts, CSVs and plots.
+
+Still working on the report: I've collected the per-log numbers (progress, WRITE/ACCEPT first/last statistics) and am writing the Summary and per-log tables into the document next.
+
+Writing the Summary section into the document now. I have the Q1–Q3 numbers and the vote-order details; Q4–Q6 numbers were verified earlier.
+
+Still on the report. I'm re-reading the Q5 ordering results so I can write that section with exact link counts, then I'll fill the sections in order (Summary first).
+
+Quick status: I have all the numbers for Q1–Q6 in front of me now. I'm about to write the report sections into the document, starting with the Summary and the four per-log tables.
+
+Writing the Summary into the document now.
+
+The Summary is in the document. Next: one table per log (four tables with line numbers), then Q1–Q6.
+
+Still writing: assembling the four per-log tables (I'm checking the raw lines each table cites before I put them in the document).
+
+Q1 is in the document. Writing Q2 (first/last WRITE and ACCEPT senders) next.
+
+Q2 is in the document. Writing Q3 (views, matches with log entries, shared patterns and vote order) now.
+
+Still working: I'm pulling the view-pattern and vote-order numbers for Q3 so I can write that section into the report. Q4 to Q6 follow.
+
+Still on Q3: I have the view tables and the global vote-order shares by role. I'm now reading the per-receiver (log 1) tables and then writing the section.
+
+Still on Q3: aggregating the 159,098 log-entry-versus-view checks into one compact table. Then I'll write the section into the report.
+
+Still on Q3: I'm confirming how each view's line range and leader were derived, so the section can state it correctly. Writing it into the report next.
+
+Still on Q3: all example vote lines are checked against the raw logs. I'm assembling the section text (views, matches, patterns, vote order) and will write it into the report now.
+
+Still on Q3: tables and wording are ready and every cited line is checked. I'm sending the Q3 section into the report now.
+
+Q3 is in the document. Writing Q4 (timeouts and leader change) now.
+
+Still on Q4: I've re-read the raw leader-change lines in logs 2 and 4 (lines 160-262) and the start-up block. Writing the timeline into the report now.
+
+Q4 is in the document. I'm checking its CID numbers against the data and fixing one clumsy sentence, then writing Q5 (event ordering).
+
+Still on Q5: I've read the link checks, per-replica checks and recovery-chain data. Writing the ordering section into the report now.
+
+Q6 (regencies) is in the document. Before I write the last three sections, I'm checking its line numbers and counts against the data.
+
+Q6 numbers are checked against the data and a few errors are fixed (timeout count, regency-2 line count, some wording). I'm reading the document back to check Q6 against Q4 and Q5, then I write the last three sections.
+
+Still reading the whole document back (Summary, per-log tables and Q1 are consistent so far). Next I check Q2-Q5, then write the last three sections.
+
+The whole document reads consistently; I made a few more small wording fixes in Q6. Now I'm collecting the exact counts and example lines for the "lines that could not be parsed" section, then writing that and the last two sections.
+
+Q6 text is corrected (rev 25). Now writing the section "Lines that could not be parsed", using the parser's own counts and example line numbers.
+
+I wrote a script that re-checks the report's numbers and line numbers straight from the raw logs, independent of my parser. Running it now; it will show any claim that does not match.
+
+The raw-log check passes 262 of 275 claims; the 13 failures are mostly my check's own regexes on log 1's damaged lines. I'm fixing those and re-running. It also showed one real correction for the document: log 1 has five damaged "Deciding" lines, not four.
+
+All 300 re-checked claims now match the raw logs. A full clean re-run of every script is in progress to prove the scripts reproduce the CSVs; meanwhile I'm looking at the seven plots to describe them and embed them in the document.
+
+The clean re-run reproduced all 61 CSVs and all 7 plots exactly, and the 300 re-checked claims still pass. I've now looked at every plot. Next: the README and file manifest, the last two sections of the report (Files, What could still be wrong), embedding the plots, and the download package.
+
+While writing the file manifest I found a misleading label in csv/q3_views.csv: the CID-0 views at ts 0 in logs 2 and 4 say "consensus decided in it", but CID 0 was not decided at ts 0 there. I'm fixing the label and re-running; the report text is not affected.
+
+Fixing the view-status label in the Q3 script now (it will say "CID 0 proposed, not decided" for the ts-0 views of logs 2 and 4), then writing the README generator.
+
+README and file manifest are written and verified (13 scripts, 61 CSVs, 7 plots, nothing unlisted). Now I'm pulling exact numbers for the "What could still be wrong" section and then filling the last two sections of the report.
+
+Checking the end of the report: the last section ("Lines that could not be parsed") shows a gap in my text dump, so I'm verifying that its content is really in the document before I fill the final two sections.
+
+Adding a few independent raw-log checks for the numbers I'm about to quote in the "could still be wrong" section (log 1's received-before-sent counts, inferred last-vote counts), then I'll write both final sections.
+
+The checker now covers 318 numbers and all pass, including the new ones for log 1's out-of-order receipts and the inferred last votes. Making the README read the claim count from the file, then writing the last two report sections.
+
+The "What could still be wrong" section is in the report. Now adding the Files section (every script, CSV and plot with what it contains), then I'll embed the plots.
+
+All seven plots are now embedded in the report next to their questions. Starting a final clean re-run of every script on the finished code to confirm the tables and plots still reproduce, and reading the whole report through once for consistency.
+
+Read the whole report through: it is consistent, and I tightened four sentences so the Summary and Q2/Q3/Q5 text match the final caveats (ACCEPT order "close to random" instead of "no replica effect"; line-order wording for logs 2-4). The clean re-run is in its third script; next I compare its tables with mine, then export a PDF copy of the report and build the zip.
+
+The clean re-run finished: all 61 tables, all 7 plots and the README match mine exactly, and all 318 claims pass against the raw logs. The PDF export of the report has no plots in it, because they come out as text placeholders. So I'm building the PDF copy myself with the plots embedded, then zipping everything.
+
+Now rendering my own PDF copy of the report from its text export, with the 7 plots placed back in from the plots folder. After that I zip everything up and send it.
+
+Building the PDF copy now (report text and tables plus the 7 plots). Next I check how it renders, then zip everything.
+
+PDF rebuilt after fixing words that broke mid-word in table cells (35 pages, 7 plots embedded). Checking the page layout once more, then packaging.
+
+Found a leftover "[image: …]" text line in the PDF next to each plot. I'm removing those placeholders so only the plots show, then I recheck every page.
+
+The PDF copy looks right through page 28 (tables fit the page, all 7 plots in place). I'm checking the last pages, then building the zip.
+
+Checking that every sentence and table cell of the report made it into the PDF text. 33 of 962 units did not match literally, so I'm looking at whether that is only a line-break artefact or real missing text.
+
+The zip is built and tested: 82 files, 5.6 MB, byte-identical to my working folder, and the run script stops with a clear message when the logs are missing. Sending the zip and the PDF copy of the report now.
+
+The report is a private doc, "BFT-SMaRt logs: consensus, views and leader change", with a summary, one table per log, Q1–Q6 with line numbers, and a section on what could still be wrong. Nobody else can open the link until you share it.
+
+All four runs decide CIDs 0–999. Logs 2 and 4 stall on CID 0, change the leader to replica 1 (regency 1), and then behave like logs 1 and 3. Log 4 also tries a regency 2 that is never installed. The main caveat is that the logs have no clock and log 1's line order is not causal, so everything rests on line order.
+
+A clean re-run of the scripts reproduced all 61 CSV tables and all 7 plots exactly, and all 318 numbers I quote in the report matched the raw logs.
+
+I sent you two files:
+- **`bft_smart_log_analysis.zip`**: the scripts, the CSVs (one main CSV per question plus supporting tables), one plot per question, and a README.md that says what each file contains. It does not include your logs. To rebuild, copy them into `logs/` and run `bash scripts/run_all.sh` (about 2 minutes).
+- **`BFT-SMaRt_logs_report.pdf`**: an offline copy of the report, 35 pages with the plots embedded.

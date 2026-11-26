@@ -1,0 +1,42 @@
+run,line,kind,text
+main_2.log,163,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,165,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,167,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,169,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,171,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,174,protocol_unusual,-- The following requests timed out: [[1001:-757725325:0]]
+main_2.log,197,protocol_unusual,-- Sending STOPDATA of regency 1
+main_2.log,198,protocol_unusual,-- No out of context SYNC for regency 1
+main_2.log,201,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 3
+main_2.log,203,protocol_unusual,-- Sending STOPDATA of regency 1
+main_2.log,204,protocol_unusual,-- Sending STOPDATA of regency 1
+main_2.log,205,protocol_unusual,-- No out of context SYNC for regency 1
+main_2.log,206,protocol_unusual,-- No out of context SYNC for regency 1
+main_2.log,211,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 0
+main_2.log,213,protocol_unusual,-- Sending SYNC message for regency 1
+main_2.log,214,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_2.log,222,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 2
+main_2.log,224,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_2.log,225,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_2.log,233,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_4.log,163,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,165,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,167,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,169,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,171,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,174,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,195,protocol_unusual,-- The following requests timed out: [[1001:-778304890:0]]
+main_4.log,197,protocol_unusual,-- Sending STOPDATA of regency 1
+main_4.log,198,protocol_unusual,-- No out of context SYNC for regency 1
+main_4.log,204,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 2
+main_4.log,206,protocol_unusual,-- Sending STOPDATA of regency 1
+main_4.log,207,protocol_unusual,-- No out of context SYNC for regency 1
+main_4.log,212,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 0
+main_4.log,216,protocol_unusual,-- Sending STOPDATA of regency 1
+main_4.log,217,protocol_unusual,-- No out of context SYNC for regency 1
+main_4.log,222,protocol_unusual,-- Sending SYNC message for regency 1
+main_4.log,223,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_4.log,231,protocol_unusual,-- Received leader change message of type STOPDATA for regency 1 from replica 3
+main_4.log,233,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_4.log,234,protocol_unusual,-- I did not install any proof of last decided consensus -1
+main_4.log,244,protocol_unusual,-- I did not install any proof of last decided consensus -1

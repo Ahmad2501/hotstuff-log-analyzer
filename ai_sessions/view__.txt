@@ -1,0 +1,234 @@
+can you analyze those four logs by locking at views, is there any match between the log entries to views,lock which views has the same pattern,i what is ordering for vote to be received
+Optimized tool selectionI’ll compare the four run logs view-by-view, focusing on proposal/vote/timeout events and the order replicas collect votes. First I’m checking which logs are available and their event formats so the comparison uses consistent markers.
+
+Searched for files matching `**/dataset/run-00*/main_*.log`, no matches
+
+Searched for regex `CollectVote\(from|Received proposal:|dispatching event for new view` (`**/dataset/run-00*/main_*.log`), 41 results
+
+Read memory
+
+Ran terminal command:  for f in dataset/run-00*/main_*.log; do printf '%s\t' "$f"; wc -l < "$f"; done
+
+Read 
+
+Read 
+
+Read 
+
+Read 
+
+The four inputs are present, though run 1’s log is nested under `baseline/main.log`. The key comparison will map each block hash to its view, then order `CollectVote(from N)` events per receiving replica; that distinguishes protocol-level vote arrival order from just the order blocks advanced views.
+
+Ran terminal command:  rg -n -m 5 'Received proposal:|TryCommit: Block\{|CollectVote\(from|dispatching event for new view|OnRemoteTimeout' dataset/run-001-normal/baseline/main.log
+Tool execution failed with exit code 1
+
+Ran terminal command:  grep -n -m 8 -E 'Received proposal:|TryCommit: Block\{|CollectVote\(from|dispatching event for new view|OnRemoteTimeout' dataset/run-001-normal/baseline/main.log
+Tool execution failed with exit code 2
+
+No matches found. Your search pattern might be excluded completely by either the search.exclude settings or .*ignore files.
+If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[**/node_modules,**/bower_components,**/*.code-search]).
+Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.
+
+No matches found. Your search pattern might be excluded completely by either the search.exclude settings or .*ignore files.
+If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[**/node_modules,**/bower_components,**/*.code-search]).
+Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.
+
+No matches found. Your search pattern might be excluded completely by either the search.exclude settings or .*ignore files.
+If you believe that it should have results, you can check into the .*ignore files and the exclude setting (here are some excluded patterns for reference:[**/node_modules,**/bower_components,**/*.code-search]).
+Then if you want to include those files you can call the tool again by setting "includeIgnoredFiles" to true.
+
+I hit a small path/tool mismatch: this shell doesn’t resolve run 1 at the relative location shown by the editor, and `rg` isn’t installed here. I’m resolving the exact mounted path and will use `grep` plus targeted parsing rather than infer from partial attachment excerpts.
+
+Ran terminal command:  pwd
+
+Read 
+
+Ran terminal command:  grep -n -m 10 -E 'Received proposal:|TryCommit: Block\{|CollectVote\(from|dispatching event for new view|OnRemoteTimeout' dataset/run-001-normal/main.log
+
+Read 
+
+Read 
+
+Run 1 has precomputed event parsing, and its root log differs only in run location from the attachment naming. I’m checking whether the repository already has a four-run comparison so I can verify the same-view patterns and vote ordering against parsed events rather than manually sampling these very large logs.
+
+Read 
+
+Read 
+
+Read 
+
+Read 
+
+Ran terminal command:  for f in dataset/run-001-normal/main.log dataset/run-002-normal/main_2.log dataset/run-003-normal/main_3.log dataset/run-004-normal/main_4.log; do printf '%s\t' "$f"; wc -l < "$f"; done
+
+Read 
+
+Read 
+
+Read , lines 1 to 18
+
+The existing four-run table is only an event-count comparison, not a vote-arrival trace. I’m deriving vote order directly from each log by associating each block hash with its proposal view, then collecting each replica’s `from N` sequence; I’ll report both repeated orders and views where all four runs line up.
+
+Ran terminal command:  perl -e '
+use strict; use warnings;
+my @files = ("dataset/run-001-normal/main.log", "dataset/run-002-normal/main_2.log", "dataset/run-003-normal/main_3.log", "dataset/run-004-normal/main_4.log");
+my @runs;
+for my $file (@files) {
+  open my $fh, "<", $file or die "$file: $!";
+  my (%hash_view, @votes, %view_hash);
+  my $line_no = 0;
+  while (my $line = <$fh>) {
+    ++$line_no;
+    if ($line =~ /Block\{ hash: (\S+) parent: \S+, proposer: (\d+), view: (\d+)/) {
+      $hash_view{$1} = 0 + $3;
+      $view_hash{$3} = $1;
+    }
+    if ($line =~ /\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/) {
+      push @votes, [$line_no, $1, 0 + $2, $3];
+    }
+  }
+  close $fh;
+  my %seq;
+  for my $v (sort { $a->[0] <=> $b->[0] } @votes) {
+    my ($ln, $receiver, $source, $hash) = @$v;
+    next unless exists $hash_view{$hash};
+    push @{$seq{$hash_view{$hash}}{$receiver}}, $source;
+  }
+  push @runs, { file => $file, seq => \%seq, hash => \%view_hash };
+}
+for my $view (1..20) {
+  print "VIEW $view\n";
+  for my $i (0..$#runs) {
+    my $seq = $runs[$i]{seq}{$view} || {};
+    print "  run-00".($i+1).": ";
+    for my $replica (qw(hs1 hs2 hs3 hs4)) {
+      my $list = $seq->{$replica} || [];
+      print "$replica=[", join(",", @$list), "] ";
+    }
+    print "\n";
+  }
+}
+my %signature_count;
+my @all_views;
+for my $r (@runs) { $all_views[$_] = 1 for keys %{$r->{seq}}; }
+for my $view (sort {$a<=>$b} keys %{{ map { $_ => 1 } map { keys %{$_->{seq}} } @runs }}) {
+  my @signatures;
+  for my $r (@runs) {
+    my $seq = $r->{seq}{$view} || {};
+    push @signatures, join(";", map { $_."=".join(",", @{$seq->{$_} || []}) } qw(hs1 hs2 hs3 hs4));
+  }
+  my %counts; $counts{$_}++ for @signatures;
+  $signature_count{$counts{(keys %counts)[0]}}++ if keys(%counts) == 1;
+}
+print "\nExact full-replica vote-order signature matches across all four runs (count of views by identical-run multiplicity):\n";
+for my $k (sort {$a<=>$b} keys %signature_count) { print "all four identical: $signature_count{$k} views (internal check key $k)\n"; }
+'
+
+Ran terminal command:  perl -e '
+use strict; use warnings;
+my @files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log"); my @runs;
+for my $file (@files) { open my $fh,"<",$file or die "$file: $!"; my (%hv,@votes); my $ln=0; while(my $line=<$fh>){++$ln; if($line =~ /Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=0+$2;} if($line =~ /\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push @votes,[$ln,$1,0+$2,$3];}} close $fh; my %seq; for my $e(sort{$a->[0]<=>$b->[0]}@votes){my($n,$r,$s,$h)=@$e; next unless exists $hv{$h}; push @{$seq{$hv{$h}}{$r}},$s;} push @runs,{file=>$file,seq=>\%seq,vote_count=>scalar(@votes)}; }
+my(%same_receiver,%same_order,%patterns); my @full_views;
+for my $v(1..100000){my(@orders,@receivers); my $valid=1; for my $r(@runs){my $by=$r->{seq}{$v}||{}; my @full=grep {@{$by->{$_}}==4} qw(hs1 hs2 hs3 hs4); if(@full!=1){$valid=0;last;} my $rx=$full[0]; push @receivers,$rx; push @orders,join(",",@{$by->{$rx}}); } next unless $valid; push @full_views,$v; $same_receiver{$v}=1 if !grep {$_ ne $receivers[0]} @receivers; $same_order{$v}=1 if !grep {$_ ne $orders[0]} @orders; for my $i(0..3){$patterns{$i}{$orders[$i]}++;} }
+for my $i(0..$#runs){my $max=0; $max=$_ if $_>$max for keys %{$runs[$i]{seq}}; printf "%s: mapped vote events=%d, max mapped view=%d, full-four-vote views=%d\n",$runs[$i]{file},$runs[$i]{vote_count},$max,scalar(grep {my $v=$_; my $s=$runs[$i]{seq}{$v}||{}; scalar(grep {@{$s->{$_}}==4} qw(hs1 hs2 hs3 hs4))==1} keys %{$runs[$i]{seq}});}
+printf "Views with one complete collector in every run: %d\n",scalar @full_views; printf "Same collector replica in all runs: %d views\n",scalar keys %same_receiver; printf "Same collector AND exact vote arrival order in all runs: %d views\n",scalar keys %same_order; print "Exact cross-run matches (view: sequence):\n"; my $n=0; for my $v(@full_views){next unless $same_order{$v}; my $by=$runs[0]{seq}{$v}; my($rx)=grep {@{$by->{$_}}==4} qw(hs1 hs2 hs3 hs4); print "$v ($rx): ",join(",",@{$by->{$rx}}),"\n"; last if ++$n>=100; } print "\nMost common full vote orders per run:\n"; for my $i(0..3){print "run-00".($i+1).": "; my @top=sort{$patterns{$i}{$b}<=>$patterns{$i}{$a}} keys %{$patterns{$i}}; for my $j(0..($#top<5?$#top:4)){print "$top[$j] x$patterns{$i}{$top[$j]}; ";} print "\n";}
+'
+Tool execution failed with exit code 255
+
+Ran terminal command:  perl -e '
+use strict; use warnings;
+my @files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log"); my @runs;
+for my $file (@files) { open my $fh,"<",$file or die "$file: $!"; my (%hv,@votes); my $ln=0; while(my $line=<$fh>){++$ln; if($line =~ /Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=0+$2;} if($line =~ /\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push @votes,[$ln,$1,0+$2,$3];}} close $fh; my %seq; for my $e(sort{$a->[0]<=>$b->[0]}@votes){my($n,$r,$s,$h)=@$e; next unless exists $hv{$h}; push @{$seq{$hv{$h}}{$r}},$s;} push @runs,{file=>$file,seq=>\%seq,vote_count=>scalar(@votes)}; }
+my(%same_receiver,%same_order,%patterns); my @full_views;
+for my $v(1..100000){my(@orders,@receivers); my $valid=1; for my $r(@runs){my $by=$r->{seq}{$v}||{}; my @full=grep {@{$by->{$_}}==4} qw(hs1 hs2 hs3 hs4); if(@full!=1){$valid=0;last;} my $rx=$full[0]; push @receivers,$rx; push @orders,join(",",@{$by->{$rx}}); } next unless $valid; push @full_views,$v; $same_receiver{$v}=1 if !grep {$_ ne $receivers[0]} @receivers; $same_order{$v}=1 if !grep {$_ ne $orders[0]} @orders; for my $i(0..3){$patterns{$i}{$orders[$i]}++;} }
+for my $i(0..$#runs){my $max=0; for my $v(keys %{$runs[$i]{seq}}){$max=$v if $v>$max;} my $full_count=0; for my $v(keys %{$runs[$i]{seq}}){my $s=$runs[$i]{seq}{$v}; my $c=grep {@{$s->{$_}}==4} qw(hs1 hs2 hs3 hs4); ++$full_count if $c==1;} printf "%s: mapped vote events=%d, max mapped view=%d, full-four-vote views=%d\n",$runs[$i]{file},$runs[$i]{vote_count},$max,$full_count;}
+printf "Views with one complete collector in every run: %d\n",scalar @full_views; printf "Same collector replica in all runs: %d views\n",scalar keys %same_receiver; printf "Same collector AND exact vote arrival order in all runs: %d views\n",scalar keys %same_order; print "Exact cross-run matches (view: sequence):\n"; my $n=0; for my $v(@full_views){next unless $same_order{$v}; my $by=$runs[0]{seq}{$v}; my($rx)=grep {@{$by->{$_}}==4} qw(hs1 hs2 hs3 hs4); print "$v ($rx): ",join(",",@{$by->{$rx}}),"\n"; last if ++$n>=100; } print "\nMost common full vote orders per run:\n"; for my $i(0..3){print "run-00".($i+1).": "; my @top=sort{$patterns{$i}{$b}<=>$patterns{$i}{$a}} keys %{$patterns{$i}}; for my $j(0..($#top<4?$#top:4)){print "$top[$j] x$patterns{$i}{$top[$j]}; ";} print "\n";}
+'
+Tool execution failed with exit code 255
+
+The first extraction confirms a consistent cyclic collector, but my stricter completeness check exposed an empty-list case in the inline summary logic, not a log inconsistency. I’m correcting that guard and then I’ll report only views with all four votes present in every run.
+
+Ran terminal command:  perl -e '
+use strict; use warnings;
+my @files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log"); my @runs;
+for my $file (@files) { open my $fh,"<",$file or die "$file: $!"; my (%hv,@votes); my $ln=0; while(my $line=<$fh>){++$ln; if($line =~ /Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=0+$2;} if($line =~ /\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push @votes,[$ln,$1,0+$2,$3];}} close $fh; my %seq; for my $e(sort{$a->[0]<=>$b->[0]}@votes){my($n,$r,$s,$h)=@$e; next unless exists $hv{$h}; push @{$seq{$hv{$h}}{$r}},$s;} push @runs,{file=>$file,seq=>\%seq,vote_count=>scalar(@votes)}; }
+my(%same_receiver,%same_order,%patterns); my @full_views;
+for my $v(1..100000){my(@orders,@receivers); my $valid=1; for my $r(@runs){my $by=$r->{seq}{$v}||{}; my @full=grep {@{$by->{$_}||[]}==4} qw(hs1 hs2 hs3 hs4); if(@full!=1){$valid=0;last;} my $rx=$full[0]; push @receivers,$rx; push @orders,join(",",@{$by->{$rx}}); } next unless $valid; push @full_views,$v; $same_receiver{$v}=1 if !grep {$_ ne $receivers[0]} @receivers; $same_order{$v}=1 if !grep {$_ ne $orders[0]} @orders; for my $i(0..3){$patterns{$i}{$orders[$i]}++;} }
+for my $i(0..$#runs){my $max=0; for my $v(keys %{$runs[$i]{seq}}){$max=$v if $v>$max;} my $full_count=0; for my $v(keys %{$runs[$i]{seq}}){my $s=$runs[$i]{seq}{$v}; my $c=grep {@{$s->{$_}||[]}==4} qw(hs1 hs2 hs3 hs4); ++$full_count if $c==1;} printf "%s: mapped vote events=%d, max mapped view=%d, full-four-vote views=%d\n",$runs[$i]{file},$runs[$i]{vote_count},$max,$full_count;}
+printf "Views with one complete collector in every run: %d\n",scalar @full_views; printf "Same collector replica in all runs: %d views\n",scalar keys %same_receiver; printf "Same collector AND exact vote arrival order in all runs: %d views\n",scalar keys %same_order; print "Exact cross-run matches (view: sequence):\n"; my $n=0; for my $v(@full_views){next unless $same_order{$v}; my $by=$runs[0]{seq}{$v}; my($rx)=grep {@{$by->{$_}||[]}==4} qw(hs1 hs2 hs3 hs4); print "$v ($rx): ",join(",",@{$by->{$rx}}),"\n"; last if ++$n>=100; } print "\nMost common full vote orders per run:\n"; for my $i(0..3){print "run-00".($i+1).": "; my @top=sort{$patterns{$i}{$b}<=>$patterns{$i}{$a}} keys %{$patterns{$i}}; for my $j(0..($#top<4?$#top:4)){print "$top[$j] x$patterns{$i}{$top[$j]}; ";} print "\n";}
+'
+
+Ran terminal command:  perl -e '
+use strict; use warnings;
+my @files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log"); my @runs;
+for my $file(@files){open my $fh,"<",$file or die $!;my(%hv,@votes);my$n=0;while(<$fh>){++$n;if(/Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=$2;}if(/\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push @votes,[$n,$1,$2,$3];}}close $fh;my%seq;for my$e(sort{$a->[0]<=>$b->[0]}@votes){next unless exists$hv{$e->[3]};push@{$seq{$hv{$e->[3]}}{$e->[1]}},$e->[2];}push@runs,{seq=>\%seq};}
+my(%exact,%prefix);my$complete=0;for my$v(1..100000){my(@seq,@rx);my$ok=1;for my$r(@runs){my$b=$r->{seq}{$v}||{};my@c=grep{@{$b->{$_}||[]}==4}qw(hs1 hs2 hs3 hs4);if(@c!=1){$ok=0;last;}push@rx,$c[0];push@seq,join(",",@{$b->{$c[0]}});}next unless$ok;++$complete;my($first)=split/,/,$seq[0];my@parts=map{[split/,/]}@seq;my$prefix_ok=1;for my$s(@parts){$prefix_ok=0 if $s->[0]!=$first || $s->[1]!=$parts[0][1];}++$prefix{$v} if $prefix_ok;if(!grep{$_ ne $seq[0]}@seq){push@{$exact{$seq[0]}},$v;}}
+print "Exact shared sequence groups (sequence: view IDs):\n";for my$s(sort keys%exact){print "$s: ",join(",",@{$exact{$s}}),"\n";}print "Total exact shared sequence views: ",scalar(map{@$_}values%exact),"; complete in all: $complete\n";
+open my$cf,"<","dataset/four_run_analysis/combined_per_view.csv" or die$!;my$header=<$cf>;chomp$header;my@h=split/,/,$header;my@events;for my$c(@h){if($c=~/^(.+)_count_run-001$/){push@events,$1;}}my%identical;while(<$cf>){chomp;my@f=split/,/;my$v=shift@f;my$ok=1;for my$e(@events){my@vals;for my$i(1..4){my($idx)=grep{$h[$_] eq "${e}_count_run-00$i"}0..$#h;push@vals,$f[$idx-1];} $ok=0 if grep{$_ ne $vals[0]}@vals;} $identical{$v}=1 if$ok;}close$cf;print "Views with identical parsed event-count vector across all four logs: ",scalar(keys%identical),"\n";print "First identical vectors: ",join(",",(sort{$a<=>$b}keys%identical)[0..((keys%identical)<20?(keys%identical)-1:19)]),"\n" if keys%identical;
+'
+
+Read , lines 1 to 120
+
+The stricter comparison now shows the collector identity is stable in every shared complete view, while the entire four-vote order matches across runs in only a subset. I’m packaging the matching view IDs by exact order and checking whether the first-vote bias is invariant, so the final answer can distinguish stable structure from nondeterministic arrival order.
+
+Ran terminal command:  perl -e '
+use strict;use warnings;my@files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log");my@runs;for my$f(@files){open my$h,"<",$f or die$!;my(%hv,@ev);my$n=0;while(<$h>){++$n;if(/Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=$2;}if(/\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push@ev,[$n,$1,$2,$3];}}close$h;my%q;for my$e(sort{$a->[0]<=>$b->[0]}@ev){next unless exists$hv{$e->[3]};push@{$q{$hv{$e->[3]}}{$e->[1]}},$e->[2];}push@runs,{seq=>\%q};}my(%groups,$same_prefix);$same_prefix=0;my$full=0;for my$v(1..100000){my(@orders,@rxs);my$ok=1;for my$r(@runs){my$b=$r->{seq}{$v}||{};my@c=grep{@{$b->{$_}||[]}==4}qw(hs1 hs2 hs3 hs4);if(@c!=1){$ok=0;last;}push@rxs,$c[0];push@orders,join(",",@{$b->{$c[0]}});}next unless$ok;++$full;my@first=map{join(",",(split/,/)[0,1])}@orders;++$same_prefix if !grep{$_ ne$first[0]}@first;if(!grep{$_ ne$orders[0]}@orders){push@{$groups{$orders[0]}},$v;}}print "Complete shared views=$full; same first-two vote arrivals in all four=$same_prefix; exact full order shared=",scalar(map{@$_}values%groups),"\n";for my$s(sort keys%groups){my@v=@{$groups{$s}};my@ranges;my($a,$z)=($v[0],$v[0]);for my$x(@v[1..$#v]){if($x==$z+1){$z=$x;}else{push@ranges,$a==$z?$a:"$a-$z";$a=$z=$x;}}push@ranges,$a==$z?$a:"$a-$z";print "$s: ",join(",",@ranges),"\n";}
+'
+
+The matching-order set groups into eight actual vote permutations; most disagreement is between the last two votes, and a smaller share changes the first-two arrival prefix too. I’m doing one final source-level check of where `CollectVote(from …)` is logged, since that determines whether this is an arrival sequence or a later certificate ordering.
+
+Read 
+
+Ran terminal command:  perl -e '
+use strict;use warnings;my@files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log");my@runs;for my$f(@files){open my$h,"<",$f or die$!;my(%hv,@e);my$n=0;while(<$h>){++$n;if(/Block\{ hash: (\S+) parent: \S+, proposer: \d+, view: (\d+)/){$hv{$1}=$2;}if(/\b(hs[1-4])\b.*?CollectVote\(from (\d+)\): (\S+)/){push@e,[$n,$1,$2,$3];}}close$h;my%q;for my$x(sort{$a->[0]<=>$b->[0]}@e){next unless exists$hv{$x->[3]};push@{$q{$hv{$x->[3]}}{$x->[1]}},$x->[2];}push@runs,{seq=>\%q};}my($shared,$cycle,$own,$prev)=(0,0,0,0);for my$v(1..1119){my@seq;my$ok=1;for my$r(@runs){my$b=$r->{seq}{$v}||{};my@c=grep{@{$b->{$_}||[]}==4}qw(hs1 hs2 hs3 hs4);if(@c!=1){$ok=0;last;}push@seq,[$c[0],@{$b->{$c[0]}}];}next unless$ok;++$shared;my$expected="hs".((($v+1)%4)+1);++$cycle if !grep{$_->[0] ne $expected}@seq;++$own if !grep{$_->[1] != substr($_->[0],2)}@seq;my$prev_id=((substr($seq[0][0],2)+2)%4)+1;++$prev if !grep{$_->[2] != $prev_id}@seq;}print "shared=$shared collector_cycle_matches=$cycle own-vote-first=$own previous-replica-second=$prev\n";
+'
+
+## Findings
+
+I mapped each `CollectVote(from N)` block hash to its proposal view across run 1, run 2, run 3, and run 4.
+
+Across the **1,078 views where all four runs had a complete set of four logged votes**:
+
+- The collecting replica follows the same four-view rotation in every run: view 1 → `hs3`, view 2 → `hs4`, view 3 → `hs1`, view 4 → `hs2`, then repeats. The collector matches across all four runs for all 1,078 views.
+- Its own vote is first in all four runs in 1,075 views. The previous replica in the rotation is second in all four runs in 1,020 views.
+- The **full four-vote arrival order matches across all four runs in 135 views**, about 12.5%.
+- In 1,020 views, the first two arrivals agree across runs; in 885 of those, at least one run differs in the order of the last two votes.
+
+For example, view 1’s collector is `hs3`, but the observed orders vary: run 1 `3,4,2,1`; run 2 `3,2,4,1`; runs 3 and 4 `3,2,1,4`. View 2 is collected by `hs4`, with orders `4,3,2,1`, `4,3,1,2`, `4,1,3,2`, and `4,3,2,1`, respectively.
+
+## Exact Matching Views
+
+These are the view IDs where the complete vote order was identical in all four runs, grouped by that order:
+
+- `1,4,2,3`: 51, 55, 79, 107, 187, 215, 295, 323, 327, 395, 427, 483, 495, 719, 823, 871
+- `1,4,3,2`: 43, 47, 283, 291, 375, 399, 415, 575, 647, 663, 795, 815, 879, 883, 891, 927, 939, 987, 999, 1059, 1087, 1111
+- `2,1,3,4`: 32, 92, 204, 272, 420, 500, 536, 576, 624, 752, 856, 880, 1096
+- `2,1,4,3`: 16, 20, 180, 340, 392, 580, 592, 644, 660, 672, 680, 704, 744, 828, 840, 1016, 1068, 1088
+- `3,2,1,4`: 25, 45, 77, 113, 373, 557, 729, 753, 933, 957, 961
+- `3,2,4,1`: 17, 49, 85, 149, 153, 185, 297, 329, 349, 425, 429, 445, 485, 505, 533, 609, 613, 773, 785, 849, 873, 881, 945, 1013, 1085
+- `4,3,1,2`: 170, 262, 362, 506, 534, 622, 818, 950, 966, 1018, 1030, 1106, 1110
+- `4,3,2,1`: 74, 106, 166, 190, 430, 450, 646, 698, 722, 762, 838, 842, 874, 882, 906, 1062, 1098
+
+## Interpreting the Order
+
+`CollectVote(from N)` records the source ID when the receiving replica handles that vote. In the voting machine, that log happens before stale-block rejection and certificate verification; verification also runs asynchronously. So this is the handler’s observed arrival order, **not necessarily the accepted-vote order or the QC signer order**. The views show a stable collector rotation, but vote arrival order is not deterministic across runs.
+
+happen there any timeout?
+Optimized tool selectionYes, the excerpts already show local and remote timeout events. I’ll count them in all four full logs and distinguish timeout triggers from “not enough timeouts” messages, which indicate a timeout quorum was still pending.
+
+Ran terminal command:  perl -e '
+use strict;use warnings;my@files=("dataset/run-001-normal/main.log","dataset/run-002-normal/main_2.log","dataset/run-003-normal/main_3.log","dataset/run-004-normal/main_4.log");for my$f(@files){open my$h,"<",$f or die"$f: $!";my(%c,%lv,%rv,%nev,%fail);while(<$h>){$c{local_start}++ if /OnLocalTimeout\s*$/;$c{local_view}++ if /OnLocalTimeout: (\d+)/;push@{$lv{$1}},1 if /OnLocalTimeout: (\d+)/;$c{remote_recv}++ if /OnRemoteTimeout \(advancing view\):/;push@{$rv{$1}},1 if /OnRemoteTimeout \(advancing view\): ID: \d+, View: (\d+)/;$c{not_enough}++ if /OnRemoteTimeout: not enough timeouts for view (\d+)/;push@{$nev{$1}},1 if /OnRemoteTimeout: not enough timeouts for view (\d+)/;$c{create_fail}++ if /Failed to create sync info/;$c{verify_fail}++ if /Failed to verify (?:sync info|timeout certificate)/;}close$h;sub views{my($h)=@_;return join(",",sort{$a<=>$b}keys%$h)||"none";}print "$f\n";print "  local timeout starts=$c{local_start} (reported views=$c{local_view}; views ".views(\%lv).")\n";print "  remote timeout messages=$c{remote_recv} (views ".views(\%rv).")\n";print "  insufficient-timeout messages=$c{not_enough} (views ".views(\%nev).")\n";print "  sync-info create failures=$c{create_fail}; verification failures=$c{verify_fail}\n";}
+'
+
+Yes. **All four runs have timeout activity.** These are counts of matching log records, not necessarily unique timeout incidents:
+
+| Run | Local timeout starts | Received remote-timeout messages | “Not enough timeouts” messages |
+|---|---:|---:|---:|
+| Run 1 | 192 | 766 | 621 |
+| Run 2 | 162 | 602 | 491 |
+| Run 3 | 206 | 816 | 648 |
+| Run 4 | 196 | 782 | 643 |
+
+View 3 has timeout activity in every run. After that, the affected views differ by run; the logs also show clusters near their high-numbered views. “Not enough timeouts” means a replica received timeout reports but did not yet have enough to advance based on them.
+
+There are also sync-info creation failures: 8, 1, 8, and 1 across runs 1–4, respectively. These counts come from log messages, so they should not be read as counts of distinct timeout certificates or consensus failures.

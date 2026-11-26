@@ -1,0 +1,665 @@
+(can you
+analyze those logs you can focus on measurable differences related to HotStuff
+protocol behavior:
+Base all findings on evidence from the original log files, not estimations or
+assumptions. Support your conclusions with exact log patterns, quantitative
+results, and verification commands.
+
+ 
+
+Look for patterns such as:
+
+- block too old
+- Failed to verify sync info
+-OnLocalTimeout
+-OnRemoteTimeout
+- not enough timeouts
+- VoteRule: liveness condition failed
+
+- HighQC updates
+
+- HighQC not updated
+- view advancement
+- commit, decide, and execute events
+
+ For each event, provide:
+
+1.    the exact log pattern you searched for.
+
+2.     count the occournce of each execution.
+
+3.  Compare the counts and identify differences and similarities of execution.
+
+4. whether the difference seems meaningful.
+
+5.   provide command or script used to verify the count.
+
+ 
+
+Do not rely only on total counts. Where possible, investigate how differences relate to
+view progression and other protocol events.
+
+2. 
+
+Analyse how
+the four replicas behave within each execution and compare their behaviour
+across the runs.
+
+Focus on
+the following questions:
+
+1. Do all replicas participate
+     similarly in proposal reception and vote collection?
+2. Is there a recurring order in
+     which votes from different replicas are received or processed?
+3. Does any replica appear more
+     frequently in the first or last position?
+4. Is any replica consistently
+     first or last across complete vote sequences?
+5. Does the ordering differ
+     between executions?
+6. Are there differences that
+     could indicate unusual replica behaviour?
+
+Provide
+per-run and combined statistics showing how frequently each replica appears
+first and last.
+
+Use
+complete vote sequences where possible, and distinguish between the replica
+receiving the votes and the replicas sending them.
+
+3. 
+
+Analyse protocol behaviour by grouping events according to their view numbers.
+
+Address the following questions:
+
+1. Which views are shared across
+     the four executions?
+2. Which views show similar
+     protocol event patterns?
+3. Which views show differences in
+     event occurrence or counts?
+4. Are there recurring patterns in
+     vote collection within the same views?
+5. Which views contain
+     timeout-related events?
+6. Are there views where
+     timeout-related events appear in all four executions?
+7. How does timeout activity
+     relate to view progression?
+
+Perform the comparison twice:
+
+- **Without considering proposer
+     identity:**
+     Match views only by view number.
+- **With proposer identity:** Match views using both view
+     number and proposer identity.
+
+Compare the
+findings from these two approaches and determine whether considering the
+proposer changes the observed similarities, differences, or vote-order
+patterns.
+
+Support the
+findings with view numbers, event counts, and examples from the logs.
+
+4. 
+
+I want you to analyze those four logs after considering the relationships and
+ordering between the events. Give evidence to support your conclusions.
+
+The
+expected ordering is:
+
+ proposal B_v with parent QC_(v-1)
+
+->
+replica receives the proposal
+
+->
+process the attached parent QC_(v-1)
+
+->
+possible HighQC update / advance into view v
+
+->
+verify the proposal
+
+-> vote
+for B_v
+
+->
+receive, verify, and collect votes for B_v
+
+->
+enough valid and distinct votes form QC_v
+
+->
+process the new-view event carrying QC_v
+
+->
+update HighQC / advance to view v+1
+
+-> next
+leader proposes B_(v+1) carrying QC_v
+
+ 
+
+The system
+has the following relationships between the events:
+
+ 
+
+- A
+proposal B_v carries a QC for its parent block.
+
+- A replica
+processes the attached parent QC before voting on the current proposal.
+
+- A replica
+can vote after receiving and validating a proposal.
+
+- A
+CollectVote event means that a vote message was received, but the vote still
+needs to be verified before it can contribute to a quorum.
+
+- Enough
+valid and distinct votes for the same proposal can form a new QC.
+
+- A new QC
+can update the HighQC and contribute to advancing the protocol to the next
+view.
+
+- The next
+proposal can extend the block certified by the new QC.
+
+- If normal
+QC-driven progress does not occur, timeout events can contribute to a view
+change.
+
+- Commit
+and DECIDE events depend on the progression of certified blocks across
+consecutive views.)
+# **HotStuff Protocol Analysis — Four Executions**
+
+This analysis uses the four original uploaded log files. It examines event frequencies, replica participation, vote ordering, view-level differences, and causal relationships between protocol events.
+
+## **1. Experimental setup**
+
+All four executions use the same logged configuration:
+
+| Parameter          | Configuration          |
+| ------------------ | ---------------------- |
+| Protocol           | Chained HotStuff       |
+| Replicas           | 4 (hs1–hs4)            |
+| Leader rotation    | Round-robin            |
+| Cryptography       | ECDSA                  |
+| Communication      | Clique                 |
+| View timeout       | 500 ms                 |
+| Clients            | 1                      |
+| Log level          | Debug                  |
+| Byzantine strategy | No strategy configured |
+
+The runs differ substantially in how many views they complete.
+
+Distinct proposal views (excluding genesis view 0)
+
+01,0002,0003,0004,000Run 1Run 2Run 3Run 4
+
+Measured from distinct Block hashes and their view fields
+
+| Execution | File            | Log lines | Highest proposed view |
+| --------- | --------------- | --------- | --------------------- |
+| Run 1     | `main(8).log`   | 204,450   | 3,688                 |
+| Run 2     | `main_2(4).log` | 63,935    | 1,119                 |
+| Run 3     | `main_3(4).log` | 128,754   | 2,300                 |
+| Run 4     | `main_4(4).log` | 202,887   | 3,659                 |
+
+**Initial finding:** Runs 1 and 4 have very similar progression, Run 3 reaches fewer views, and Run 2 reaches substantially fewer views than all the others.
+
+This difference alone does not establish replica misbehaviour or a protocol failure. It is important to examine whether each execution advances normally through its views and whether timeout or certificate-related events coincide with reduced progression.
+
+## **2. Exact protocol event counts**
+
+The following counts come from scanning the original files, using the indicated log messages.
+
+### **2.1 Synchronization, timeout, and error events**
+
+| Exact log pattern                      | Run 1 | Run 2 | Run 3 | Run 4 |
+| -------------------------------------- | ----- | ----- | ----- | ----- |
+| `block too old`                        | 979   | 402   | 865   | 901   |
+| `Failed to verify sync info`           | 5     | 17    | 8     | 10    |
+| `OnLocalTimeout` (exact message)       | 192   | 162   | 152   | 196   |
+| `OnRemoteTimeout (advancing view)`     | 766   | 602   | 601   | 782   |
+| `OnRemoteTimeout: not enough timeouts` | 621   | 491   | 481   | 643   |
+| `VoteRule: liveness condition failed`  | 4     | 4     | 4     | 4     |
+
+The `OnLocalTimeout` counts exclude separate messages such as `OnLocalTimeout: 3` to avoid counting one timeout twice. Similarly, remote timeout counts refer to the specific advancing-view message, not every line containing `OnRemoteTimeout`.
+
+### **2.2 Consensus progression and commit events**
+
+| Exact log pattern             | Run 1  | Run 2 | Run 3 | Run 4  |
+| ----------------------------- | ------ | ----- | ----- | ------ |
+| `Received proposal:`          | 11,065 | 3,357 | 6,906 | 10,978 |
+| `CollectVote(from`            | 14,787 | 4,502 | 9,291 | 14,659 |
+| `Successfully updated HighQC` | 14,751 | 4,448 | 9,195 | 14,635 |
+| `HighQC not updated`          | 12,045 | 4,089 | 7,693 | 11,970 |
+| `Advanced to view`            | 14,860 | 4,496 | 9,292 | 14,744 |
+| `CommitRule - PRE_COMMIT:`    | 14,751 | 4,460 | 9,197 | 14,636 |
+| `CommitRule - COMMIT:`        | 14,743 | 4,434 | 9,189 | 14,628 |
+| `CommitRule - DECIDE:`        | 14,743 | 4,408 | 9,189 | 14,628 |
+| `EXEC: Block`                 | 14,740 | 4,432 | 9,188 | 14,624 |
+
+These counts represent **logged events across all replicas**, not unique blocks committed or executed. For instance, a DECIDE event recorded by four replicas contributes four log entries.
+
+### **2.3 What the counts show**
+
+Runs 1 and 4 have almost identical numbers of HighQC updates, view advancements, commits, and executions. Their behaviour is consistent with sustained protocol progression.
+
+Run 3 also shows substantial consensus progression, although it contains fewer logged events.
+
+Run 2 has significantly fewer progression events and disproportionately many synchronization errors: 17 failed sync-information verifications compared with 5, 8, and 10 in the other executions.
+
+Importantly, Run 2 also contains proposals that reference parent QCs from nonconsecutive views. This provides a more specific reason to investigate its behaviour than simply observing that its event totals are smaller.
+
+## **3. Replica participation and vote ordering**
+
+### **3.1 Proposal reception and vote collection**
+
+The four replicas participate at almost identical frequencies within each execution.
+
+The table reports proposal-reception events and votes collected by each replica. A vote collected by replica 1, for example, may have been sent by any of the four replicas.
+
+| Run | Replica | Proposals received | Votes collected |
+| --- | ------- | ------------------ | --------------- |
+| 1   | hs1     | 2,767              | 3,695           |
+| 1   | hs2     | 2,766              | 3,699           |
+| 1   | hs3     | 2,766              | 3,695           |
+| 1   | hs4     | 2,766              | 3,698           |
+| 2   | hs1     | 840                | 1,128           |
+| 2   | hs2     | 839                | 1,116           |
+| 2   | hs3     | 840                | 1,126           |
+| 2   | hs4     | 838                | 1,132           |
+| 3   | hs1     | 1,726              | 2,328           |
+| 3   | hs2     | 1,725              | 2,330           |
+| 3   | hs3     | 1,728              | 2,323           |
+| 3   | hs4     | 1,727              | 2,310           |
+| 4   | hs1     | 2,745              | 3,670           |
+| 4   | hs2     | 2,744              | 3,664           |
+| 4   | hs3     | 2,744              | 3,663           |
+| 4   | hs4     | 2,745              | 3,662           |
+
+**Finding:** No replica is systematically absent from proposal reception or vote collection. The differences are small compared with the total events in each execution.
+
+### **3.2 Complete vote sequences**
+
+For vote-order analysis, I grouped `CollectVote(from N): HASH` events by the receiving replica and block hash. Only sequences containing all four distinct replica IDs are classified as complete.
+
+| Run       | Vote sequences | Complete sequences |
+| --------- | -------------- | ------------------ |
+| 1         | 3,688          | 3,686              |
+| 2         | 1,119          | 1,110              |
+| 3         | 2,300          | 2,297              |
+| 4         | 3,659          | 3,659              |
+| **Total** | **10,766**     | **10,752**         |
+
+This avoids incorrectly combining votes for different proposals or considering an incomplete sequence to have a genuine last sender.
+
+### **3.3 First and last positions**
+
+Each cell below shows the number of complete sequences in which the given replica was first or last.
+
+First-position counts
+
+| Sender | Run 1 | Run 2 | Run 3 | Run 4 | Combined |
+| ------ | ----- | ----- | ----- | ----- | -------- |
+| hs1    | 928   | 278   | 567   | 911   | 2,684    |
+| hs2    | 920   | 281   | 566   | 913   | 2,680    |
+| hs3    | 918   | 276   | 579   | 918   | 2,691    |
+| hs4    | 920   | 275   | 585   | 917   | 2,697    |
+
+Last-position counts
+
+| Sender | Run 1 | Run 2 | Run 3 | Run 4 | Combined |
+| ------ | ----- | ----- | ----- | ----- | -------- |
+| hs1    | 975   | 289   | 607   | 928   | 2,799    |
+| hs2    | 884   | 269   | 569   | 959   | 2,681    |
+| hs3    | 951   | 288   | 584   | 880   | 2,703    |
+| hs4    | 876   | 264   | 537   | 892   | 2,569    |
+
+Combined positions, 10,752 complete sequences
+
+First
+
+Last
+
+07501.5K2.2K3Khs1hs2hs3hs4
+
+The first-position frequencies are remarkably similar:
+
+- hs1: 24.96%
+- hs2: 24.93%
+- hs3: 25.03%
+- hs4: 25.08%
+
+The last-position frequencies range from 23.89% for hs4 to 26.03% for hs1.
+
+This is not sufficient evidence of anomalous behaviour by any replica.
+
+### **3.4 Important: the first vote follows a recurring structural pattern**
+
+The full sequences reveal a strong pattern that is hidden by the overall first-position statistics.
+
+| Run          | Collector first | Complete sequences | Percentage |
+| ------------ | --------------- | ------------------ | ---------- |
+| 1            | 3,660           | 3,686              | 99.29%     |
+| 2            | 1,090           | 1,110              | 98.20%     |
+| 3            | 2,236           | 2,297              | 97.34%     |
+| 4            | 3,643           | 3,659              | 99.56%     |
+| **Combined** | **10,629**      | **10,752**         | **98.86%** |
+
+The collector is generally the next leader under round-robin rotation.
+
+For example, in Run 2:
+
+| Proposal view | Proposer | Vote collector | Recorded vote order |
+| ------------- | -------- | -------------- | ------------------- |
+| 1             | hs2      | hs3            | 3 → 2 → 4 → 1       |
+| 2             | hs3      | hs4            | 4 → 3 → 1 → 2       |
+| 3             | hs4      | hs1            | 1 → 4 → 2 → 3       |
+| 4             | hs1      | hs2            | 2 → 1 → 3 → 4       |
+
+**Interpretation:** The first position is strongly associated with the vote collector, not with a particular replica being faster in all circumstances. The four replicas rotate through this role.
+
+The remaining order varies between executions. For example, at view 1, Runs 3 and 4 have the same complete order, whereas Runs 1 and 2 differ.
+
+The collector appears last in only 2 of the 10,752 complete sequences.
+
+This suggests the logging and vote-processing mechanism has a recurring collection-order structure. It does not establish network latency rankings, because log order is not a direct measurement of message transmission time.
+
+## **4. Comparing protocol events by view**
+
+### **4.1 Views shared by all four executions**
+
+All four logs contain proposal views **1 through 1,119**, plus genesis view 0.
+
+This gives 1,119 directly comparable proposal views. Beyond view 1,119, Run 2 cannot be included in four-way comparisons.
+
+For view matching, I used two keys:
+
+1. View number alone: `(view)`.
+2. View number together with proposer: `(view, proposer)`.
+
+### **4.2 Does proposer identity change the comparison?**
+
+In the 1,120 shared block views including genesis, proposer identity matches in all four runs.
+
+| Matching method  | Common block views | Views with complete vote sequences across all runs | Views sharing at least one identical complete vote order |
+| ---------------- | ------------------ | -------------------------------------------------- | -------------------------------------------------------- |
+| View number only | 1,120              | 1,106                                              | 132                                                      |
+| View + proposer  | 1,120              | 1,106                                              | 132                                                      |
+
+**Finding:** Including proposer identity does not change the matched results in this dataset.
+
+This follows the observed round-robin leader assignments. Proposer identity is still worth recording in the analysis, particularly when studying executions with different leader-selection configurations or faulty-leader scenarios.
+
+### **4.3 Views with similar and different behaviour**
+
+At views 1 and 2, the four runs exhibit the same general progression pattern: proposal reception, vote collection, new-view dispatch and subsequent view advancement.
+
+At view 3, all four executions contain timeout activity. They nonetheless form complete vote sequences, so the presence of a timeout message is not by itself evidence that consensus stopped.
+
+A more substantial difference appears in **Run 2, particularly around views 896–914**.
+
+| View | Run 2 complete vote sequence | Run 2 remote timeout logs | Run 2 QC dispatches |
+| ---- | ---------------------------- | ------------------------- | ------------------- |
+| 896  | Yes                          | 16                        | 1                   |
+| 897  | No                           | 22                        | 0                   |
+| 898  | No                           | 50                        | 0                   |
+| 899  | Yes                          | 22                        | 1                   |
+| 900  | No                           | 25                        | 0                   |
+| 901  | No                           | 21                        | 0                   |
+| 902  | Yes                          | 18                        | 1                   |
+| 903  | Yes                          | 22                        | 1                   |
+| 904  | No                           | 25                        | 0                   |
+| 905  | No                           | 19                        | 0                   |
+| 906  | Yes                          | 15                        | 2                   |
+
+A complete vote sequence was observed in Runs 1, 3 and 4 at each of these views.
+
+Run 2 therefore shows a concentrated period of repeated timeout processing and incomplete vote collection at views where the other executions demonstrate normal vote collection.
+
+The multiple remote timeout entries must not be interpreted as equally many distinct timeout messages: a timeout can generate log entries at several receiving replicas, and repeated processing may also be recorded.
+
+### **4.4 Timeout views shared across executions**
+
+Grouping timeout events using the explicit remote timeout view and each replica's most recently logged view for local timeout events gives the following:
+
+| Run | Distinct views with timeout activity |
+| --- | ------------------------------------ |
+| 1   | 91                                   |
+| 2   | 45                                   |
+| 3   | 64                                   |
+| 4   | 89                                   |
+
+Only **view 3** is shared by the timeout-view sets of all four runs.
+
+This distinction matters: timeouts occur repeatedly, but most are associated with different view numbers between executions.
+
+The largest concentrated timeout activity in Run 2 occurs around view 898. In the other runs, much of the repeated late timeout activity occurs near or beyond the highest proposed views.
+
+Local timeout view attribution is inferred from each replica's preceding `Advanced to view` message where an explicit view is not provided. The remote timeout view numbers are taken directly from the log messages.
+
+## **5. Relationships and ordering between protocol events**
+
+The most important part of the analysis is determining whether the events form a logically connected progression rather than simply occurring frequently.
+
+### **5.1 Expected progression**
+
+**Proposal Bᵥ**
+
+Contains parent QC and parent block hash
+
+**Receive proposal and process parent QC**
+
+Potential HighQC update and view advancement
+
+**Validate proposal and vote**
+
+Next leader collects and verifies distinct votes
+
+**QCᵥ and OnNewView**
+
+Update HighQC and advance toward view v+1
+
+**Next proposal Bᵥ₊₁**
+
+Extends a certified block; chained certification supports commit and execution
+
+Alternative path: timeout certificates can support view changes when normal QC-driven progression is delayed.
+
+### **5.2 Verified example: Run 2, views 1–3**
+
+The beginning of Run 2 provides a concrete sequence.
+
+**View 1 — block&#x20;**`fn6yGE0b`
+
+Log evidence
+
+Lines 87–90: hs3 collects votes from replicas 3, 2, 4 and 1 for the same block hash.
+
+Line 91: `CollectVote: dispatching event for new view (current : 1)`.
+
+Line 92: `OnNewView (from network: false)`.
+
+Line 93: hs3 processes QC for `fn6yGE0b`, view 1.
+
+Lines 94–95: HighQC is updated and hs3 advances to view 2.
+
+**View 2 — block&#x20;**`Sxxt8pzb`
+
+Line 97: hs3 processes a block referencing `fn6yGE0b` as both parent hash and attached QC hash.
+
+Lines 100–102: other replicas receive the view-2 proposal and begin processing the attached QC.
+
+Lines 122–125: hs4 collects votes from replicas 4, 3, 1 and 2 for `Sxxt8pzb`.
+
+Lines 126–130: hs4 dispatches a new-view event, processes the QC for view 2, updates HighQC and advances to view 3.
+
+**View 3 — chained commit progression**
+
+Lines 133–136: the commit logic records PRE_COMMIT for the view-2 block, COMMIT for the view-1 block and DECIDE for the genesis block.
+
+Line 138: hs3 receives a proposal for view 3, extending `Sxxt8pzb` and carrying its view-2 QC.
+
+This example demonstrates a connected chain:
+
+`fn6yGE0b` → `Sxxt8pzb` → `4xLHdmgy`
+
+The log evidence supports the expected relationship between parent certificates, vote collection, QC-driven advancement and chained commit progression.
+
+It does not directly expose every internal proposal-validation or vote-signature-verification operation, so those steps cannot all be independently confirmed from the logging.
+
+### **5.3 Parent QC consistency across all four runs**
+
+I extracted the parent hash, proposal view, proposer, QC hash and QC view from every distinct logged block.
+
+For proposed blocks above view 1:
+
+| Relationship checked                                   | Result          |
+| ------------------------------------------------------ | --------------- |
+| Parent hash equals attached QC hash                    | 10,762 / 10,762 |
+| Attached QC belongs to immediately preceding view      | 10,752 / 10,762 |
+| Attached QC references an earlier, nonconsecutive view | 10 / 10,762     |
+
+The 10 nonconsecutive-view examples occur **exclusively in Run 2**.
+
+Examples include:
+
+| Run 2 proposed view | Attached QC view | Proposal hash | Original log line |
+| ------------------- | ---------------- | ------------- | ----------------- |
+| 897                 | 895              | `nV+NRgFy`    | 49,305            |
+| 898                 | 895              | `tq5GQ99P`    | 49,437            |
+| 899                 | 896              | `EbAxiyFL`    | 49,599            |
+| 901                 | 899              | `HVq7zN+A`    | 49,998            |
+| 902                 | 899              | `aeHNkMx9`    | 50,123            |
+| 904                 | 902              | `GY6A3Rnf`    | 50,466            |
+| 905                 | 902              | `TEiBuu1j`    | 50,609            |
+| 906                 | 903              | `rE+fWJ5I`    | 50,738            |
+| 908                 | 906              | `sBwUO3Yh`    | 50,988            |
+| 914                 | 912              | `04mqAzRW`    | 51,877            |
+
+**Interpretation:** During this interval, Run 2 sometimes proposes blocks extending an older certified block instead of a block from the immediately preceding view.
+
+This is not automatically a HotStuff correctness violation. A view can change without producing a newly certified block, and a later proposal can extend the highest available certified block.
+
+However, these examples coincide with incomplete vote sequences, repeated timeouts and failed sync-information verification messages. Together they indicate a period of disrupted or delayed normal QC-driven progression.
+
+This is one of the strongest differences between Run 2 and the other three executions.
+
+### **5.4 HighQC updates and view advancement**
+
+The logs show two distinct cases.
+
+**Successful update:** `advanceView: Successfully updated HighQC` followed, where appropriate, by `advanceView: Advanced to view N`.
+
+**No update:** `advanceView: HighQC not updated, current view: X, new view: Y`.
+
+A HighQC-not-updated event is not necessarily abnormal. For example, a replica that has already processed a newer QC may receive another copy of an older certificate. Reprocessing it should not lower its HighQC.
+
+This helps explain why there are thousands of HighQC-not-updated messages in all four runs despite continued consensus progress.
+
+The key distinction is whether the replica subsequently advances and continues participating, rather than the number of unsuccessful update attempts alone.
+
+### **5.5 Commit, DECIDE and execution**
+
+All four runs contain sustained PRE_COMMIT, COMMIT, DECIDE and EXEC activity.
+
+Run 2 contains 4,408 DECIDE records and 4,432 EXEC records, so a lower total number of views does not mean consensus completely failed.
+
+Nevertheless, some Run 2 views with incomplete vote collection do not contain normal corresponding QC-dispatch or execution activity.
+
+The aggregate results support the following interpretation:
+
+- Runs 1 and 4 demonstrate sustained chained consensus progression.
+- Run 3 demonstrates similarly structured progression over a shorter execution.
+- Run 2 demonstrates periods of normal progression interrupted by concentrated timeout and synchronization activity, particularly around views 896–914.
+
+An especially important limitation is that `CollectVote` indicates receipt, not successful signature validation. A complete four-sender sequence therefore establishes complete *logged reception*, not independently verified validity of all four votes.
+
+## **6. Verification commands and reproducible files**
+
+I created a Python analysis script that reads the four original files and produces detailed CSV outputs containing event counts, vote orders, per-view comparisons, replica statistics, timeout events and block/QC information.
+
+**Complete HotStuff analysis package**
+
+Python script, CSV results and JSON summary
+
+Download complete analysis (ZIP)
+
+Python analysis script
+
+Event counts CSV
+
+Vote first/last statistics CSV
+
+View-level comparison CSV
+
+All complete and incomplete vote sequences CSV
+
+Matched vote-order comparison CSV
+
+To reproduce the full analysis, run:
+
+```
+python analyze_hotstuff.py
+```
+
+Some individual verification commands for Run 2 are:
+
+```
+# View progression
+grep -c 'advanceView: Advanced to view' 'main_2(4).log'
+
+# Successful HighQC updates
+grep -c 'Successfully updated HighQC' 'main_2(4).log'
+
+# Failed sync-information verification
+grep -c 'Failed to verify sync info' 'main_2(4).log'
+
+# DECIDE events
+grep -c 'CommitRule - DECIDE:' 'main_2(4).log'
+
+# Vote collection
+grep -c 'CollectVote(from' 'main_2(4).log'
+
+# Inspect activity around view 898
+grep -nE 'View: 898|view: 898|view 898' 'main_2(4).log'
+```
+
+The Python script is necessary for the more complex comparisons, particularly the block-hash grouping, complete vote sequences and view-plus-proposer matching.
+
+## **7. Overall conclusions**
+
+The evidence supports five main conclusions.
+
+**First, the executions differ strongly in their total consensus progression.** Runs 1 and 4 reach approximately 3,600 proposal views, Run 3 reaches 2,300, and Run 2 reaches only 1,119. These differences are accompanied by correspondingly different numbers of commit and execution events.
+
+**Second, replica participation is generally balanced.** Proposal reception and vote collection are distributed almost equally across the four replicas within each execution. There is no clear evidence from these aggregate counts that one replica is consistently inactive.
+
+**Third, vote ordering is not entirely random.** The next leader, acting as vote collector, appears first in 98.86% of complete logged vote sequences. However, the identity of that collector rotates, and the ordering of the other replicas varies. No individual replica is consistently first or last across the executions.
+
+**Fourth, comparing views with proposer identity produces the same result as comparing view numbers alone.** The shared proposed views have matching proposers across all four executions. Only 132 of the 1,106 comparable views with complete sequences share an identical complete vote order across all four runs.
+
+**Fifth, Run 2 contains a distinctive disruption around views 896–914.** This interval includes repeated timeout processing, incomplete vote sequences and proposals extending QCs from earlier, nonconsecutive views. The observations suggest temporary disruption to normal QC-driven progression, followed by recovery in subsequent views. They do not, without additional evidence, establish Byzantine behaviour or an implementation error.
+
+### **Important methodological limitations**
+
+The analysis is based on debug logs, not a complete internal execution trace. It therefore cannot prove every successful vote verification, every attempted proposal or every internal state transition.
+
+Global line order also should not be treated as exact causality between different replicas. The strongest event-order evidence comes from messages attributable to the same replica and the same block hash.
+
+The strongest overall finding for a master thesis is that **the four runs preserve broadly similar replica-participation and vote-collection structures, while differing substantially in progress and timeout-related behaviour. Run 2 shows a particularly informative example of how interrupted QC progression, older parent certificates and repeated timeout processing can occur together without permanently preventing subsequent consensus progress.**
